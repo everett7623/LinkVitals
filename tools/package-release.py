@@ -12,7 +12,7 @@ be archived. This script deliberately creates the upload-safe package:
 
 The zip filename intentionally omits the version. Some hosting file managers
 extract archives into a folder named after the zip file, so a versioned archive
-name can leave wp-content/plugins/linkvitals-0.3.1/ on the server.
+name can leave wp-content/plugins/linkvitals-<version>/ on the server.
 WordPress plugin directories should keep the stable slug:
 wp-content/plugins/linkvitals/.
 
@@ -176,7 +176,7 @@ def parse_args() -> argparse.Namespace:
         "--allow-versioned-filename",
         action="store_true",
         help=(
-            "Allow an output filename like linkvitals-0.3.1.zip. "
+            "Allow an output filename like linkvitals-<version>.zip. "
             "Use only for archival copies, not for server file-manager uploads."
         ),
     )

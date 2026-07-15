@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.1
+Stable tag: 0.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -88,6 +88,10 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.2 =
+* Made queue batch claims atomic so concurrent AJAX and WP-Cron workers cannot process the same content objects
+* Prevented scans from completing while another worker still owns pending or processing queue items
 
 = 0.3.1 =
 * Pointed project and plugin metadata to the canonical GitHub repository
@@ -193,6 +197,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.2 =
+Improves scan reliability when AJAX and WP-Cron process the queue concurrently.
 
 = 0.3.1 =
 Publishes the canonical GitHub project location for LinkVitals.

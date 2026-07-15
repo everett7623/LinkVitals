@@ -37,12 +37,6 @@ class LHA_Link_Checker {
     private const DOMAIN_RATE_LIMIT_MS = 1000;
 
     /**
-     * Custom User-Agent string.
-     * Uses a browser-like UA to reduce false positives from WAF/bot protection.
-     */
-    private const USER_AGENT = 'Mozilla/5.0 (compatible; LinkVitals/0.3.1; +https://github.com/everett7623/LinkVitals)';
-
-    /**
      * Default HTTP timeout in seconds.
      */
     private const DEFAULT_TIMEOUT = 8;
@@ -216,7 +210,10 @@ class LHA_Link_Checker {
         $args = array(
             'timeout'     => $timeout,
             'redirection' => $max_redirects,
-            'user-agent'  => self::USER_AGENT,
+            'user-agent'  => sprintf(
+                'Mozilla/5.0 (compatible; LinkVitals/%s; +https://github.com/everett7623/LinkVitals)',
+                LHA_VERSION
+            ),
             'sslverify'   => true,
             'headers'     => array(
                 'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

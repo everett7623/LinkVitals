@@ -140,6 +140,8 @@ Recent cleanup already performed:
   history purge, and guarded data reset
 - added post-level `edit_post` capability checks before repair actions modify
   source post content
+- made queue claims atomic with per-batch claim tokens and prevented scan
+  completion while another worker still owns queue items
 
 Known gaps:
 
@@ -216,7 +218,7 @@ Tables use `$wpdb->prefix . 'lha_' . $name`.
   `edit_url`, `html_tag`, `attribute_name`, `anchor_text`, `raw_html`,
   `context_snippet`, timestamps.
 - `lha_queue`: scan objects with `object_type`, `object_id`, `object_url`,
-  `status`, `priority`, `attempts`, `last_error`, timestamps.
+  `status`, `priority`, `attempts`, `last_error`, `claim_token`, timestamps.
 - `lha_logs`: audit trail with `action_type`, `url`, `old_value`, `new_value`,
   `object_ids`, `message`, `user_id`, `created_at`.
 - `lha_repairs`: reversible source-content repair history. Important fields
@@ -371,7 +373,7 @@ Good next tasks:
 - The upload artifact must be named `linkvitals.zip`, not
   `linkvitals-<version>.zip`. Some hosting file managers extract
   archives into a folder named after the zip; a versioned zip name can create
-  `wp-content/plugins/linkvitals-0.3.1/`, which breaks predictable
+  `wp-content/plugins/linkvitals-<version>/`, which breaks predictable
   WordPress plugin deletion and upgrades.
 - WordPress installs and deletes plugins by the path it discovered at upload
   time. If a bad zip was installed with an extra outer folder, the admin delete

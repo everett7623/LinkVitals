@@ -152,11 +152,13 @@ class LHA_DB {
             priority tinyint(3) unsigned NOT NULL DEFAULT 0,
             attempts tinyint(3) unsigned NOT NULL DEFAULT 0,
             last_error text NOT NULL,
+            claim_token varchar(36) NOT NULL DEFAULT '',
             created_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
             updated_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
             PRIMARY KEY  (id),
             KEY status (status),
             KEY priority (priority),
+            KEY claim_token (claim_token),
             KEY object_type_id (object_type, object_id)
         ) {$charset_collate};";
 
