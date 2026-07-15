@@ -402,6 +402,28 @@ lha_test(
 );
 
 lha_test(
+    'keeps release metadata tied to the plugin version',
+    static function(): void {
+        $main = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
+        preg_match( "/define\( 'LHA_VERSION', '([^']+)' \)/", is_string( $main ) ? $main : '', $version_match );
+        $version = $version_match[1] ?? '';
+
+        lha_assert_same( true, '' !== $version );
+        foreach ( array( 'linkvitals.pot', 'linkvitals-zh_CN.po' ) as $catalog ) {
+            $contents = file_get_contents( dirname( __DIR__ ) . '/linkvitals/languages/' . $catalog );
+            lha_assert_same(
+                true,
+                is_string( $contents ) && str_contains( $contents, 'Project-Id-Version: LinkVitals ' . $version )
+            );
+        }
+
+        $checker = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-checker.php' );
+        lha_assert_same( true, is_string( $checker ) && str_contains( $checker, 'LHA_VERSION' ) );
+        lha_assert_same( 0, preg_match( '/LinkVitals\/[0-9]+\.[0-9]+\.[0-9]+/', is_string( $checker ) ? $checker : '' ) );
+    }
+);
+
+lha_test(
     'keeps the scan running while another worker owns queue items',
     static function(): void {
         $GLOBALS['lha_test_options'] = array(

@@ -373,7 +373,7 @@ Good next tasks:
 - The upload artifact must be named `linkvitals.zip`, not
   `linkvitals-<version>.zip`. Some hosting file managers extract
   archives into a folder named after the zip; a versioned zip name can create
-  `wp-content/plugins/linkvitals-0.3.1/`, which breaks predictable
+  `wp-content/plugins/linkvitals-<version>/`, which breaks predictable
   WordPress plugin deletion and upgrades.
 - WordPress installs and deletes plugins by the path it discovered at upload
   time. If a bad zip was installed with an extra outer folder, the admin delete
