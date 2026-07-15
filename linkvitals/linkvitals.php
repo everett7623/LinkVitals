@@ -3,7 +3,7 @@
  * Plugin Name: LinkVitals – Link Health & SEO Auditor
  * Plugin URI: https://github.com/everett7623/LinkVitals
  * Description: Comprehensive link health audit plugin for WordPress. Detects broken links, redirects, timeouts, SSL errors, orphaned pages, and SEO link risks across posts, pages, menus, and custom post types.
- * Version: 0.3.2
+ * Version: 0.3.3
  * Requires at least: 6.4
  * Requires PHP: 8.0
  * Author: everettlabs
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'LHA_VERSION', '0.3.2' );
+define( 'LHA_VERSION', '0.3.3' );
 define( 'LHA_PLUGIN_FILE', __FILE__ );
 define( 'LHA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LHA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -41,6 +41,7 @@ require_once LHA_PLUGIN_DIR . 'includes/class-lha-queue.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-cron.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-exporter.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-repair.php';
+require_once LHA_PLUGIN_DIR . 'includes/class-lha-image-repair.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-logger.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-anchor-checker.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-seo-checker.php';

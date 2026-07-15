@@ -18,6 +18,13 @@ if ( ! function_exists( 'sanitize_key' ) ) {
     }
 }
 
+if ( ! function_exists( '__' ) ) {
+    function __( string $text, string $domain = 'default' ): string {
+        unset( $domain );
+        return $text;
+    }
+}
+
 if ( ! function_exists( 'absint' ) ) {
     function absint( mixed $value ): int {
         return abs( (int) $value );
@@ -75,6 +82,8 @@ if ( ! function_exists( 'mb_substr' ) ) {
 
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-extractor.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-checker.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-image-repair.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php';
 
@@ -398,6 +407,87 @@ lha_test(
 
         lha_assert_same( true, is_string( $schema ) && str_contains( $schema, "claim_token varchar(36) NOT NULL DEFAULT ''" ) );
         lha_assert_same( true, is_string( $schema ) && str_contains( $schema, 'KEY claim_token (claim_token)' ) );
+    }
+);
+
+lha_test(
+    'derives WordPress image-size repair candidates without guessing',
+    static function(): void {
+        lha_assert_same(
+            array( 'https://example.com/uploads/photo.jpg?cache=1' ),
+            LHA_Image_Repair::get_candidate_urls( 'https://example.com/uploads/photo-300x300.jpg?cache=1' )
+        );
+        lha_assert_same(
+            array(
+                'https://example.com/uploads/photo-scaled.webp',
+                'https://example.com/uploads/photo.webp',
+            ),
+            LHA_Image_Repair::get_candidate_urls( 'https://example.com/uploads/photo-scaled-1024x683.webp' )
+        );
+        lha_assert_same( array(), LHA_Image_Repair::get_candidate_urls( 'https://example.com/uploads/photo.jpg' ) );
+        lha_assert_same( array(), LHA_Image_Repair::get_candidate_urls( 'https://example.com/300x300/photo.jpg' ) );
+    }
+);
+
+lha_test(
+    'limits automatic image repair eligibility to internal 404 variants',
+    static function(): void {
+        $eligible = array(
+            'url'        => 'https://example.com/uploads/photo-300x300.jpg',
+            'link_type'  => 'image',
+            'status'     => 'broken',
+            'http_code'  => 404,
+            'is_ignored' => 0,
+        );
+
+        lha_assert_same( true, LHA_Image_Repair::is_repairable_link( $eligible ) );
+
+        $external = $eligible;
+        $external['url'] = 'https://other.example/uploads/photo-300x300.jpg';
+        lha_assert_same( false, LHA_Image_Repair::is_repairable_link( $external ) );
+
+        $not_found = $eligible;
+        $not_found['http_code'] = 500;
+        lha_assert_same( false, LHA_Image_Repair::is_repairable_link( $not_found ) );
+
+        $ignored = $eligible;
+        $ignored['is_ignored'] = 1;
+        lha_assert_same( false, LHA_Image_Repair::is_repairable_link( $ignored ) );
+    }
+);
+
+lha_test(
+    'keeps image repair failure responses on one stable contract',
+    static function(): void {
+        lha_assert_same(
+            array(
+                'success'  => false,
+                'status'   => 'failed',
+                'link_id'  => 0,
+                'old_url'  => '',
+                'new_url'  => '',
+                'replaced' => 0,
+                'resolved' => false,
+                'message'  => 'Invalid link ID.',
+            ),
+            ( new LHA_Image_Repair() )->repair_link( 0 )
+        );
+    }
+);
+
+lha_test(
+    'wires image repair through one AJAX action and bounded bulk client',
+    static function(): void {
+        $main   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
+        $admin  = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
+        $table  = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-list-table.php' );
+        $client = file_get_contents( dirname( __DIR__ ) . '/linkvitals/assets/js/image-repair.js' );
+
+        lha_assert_same( true, is_string( $main ) && str_contains( $main, 'class-lha-image-repair.php' ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'wp_ajax_lha_repair_image_variant' ) );
+        lha_assert_same( true, is_string( $table ) && str_contains( $table, 'repair_image_variants' ) );
+        lha_assert_same( true, is_string( $client ) && str_contains( $client, "action: 'lha_repair_image_variant'" ) );
+        lha_assert_same( true, is_string( $client ) && str_contains( $client, 'index++' ) );
     }
 );
 

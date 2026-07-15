@@ -76,6 +76,7 @@ class LHA_List_Table extends WP_List_Table {
             'recheck'     => __( 'Recheck', 'linkvitals' ),
             'ignore'      => __( 'Ignore', 'linkvitals' ),
             'unignore'    => __( 'Unignore', 'linkvitals' ),
+            'repair_image_variants' => __( 'Repair Missing Image Sizes', 'linkvitals' ),
             'replace_url' => __( 'Replace URL', 'linkvitals' ),
             'unlink'      => __( 'Unlink', 'linkvitals' ),
         );
@@ -156,7 +157,11 @@ class LHA_List_Table extends WP_List_Table {
             return '';
         } elseif ( 404 === $http_code ) {
             if ( 'image' === $link_type ) {
-                $suggestion = __( 'Suggestion: restore the missing media file or replace this image URL with the correct attachment URL.', 'linkvitals' );
+                if ( LHA_Image_Repair::is_repairable_link( $item ) ) {
+                    $suggestion = __( 'Suggestion: verify and replace this missing WordPress image size with its original image.', 'linkvitals' );
+                } else {
+                    $suggestion = __( 'Suggestion: restore the missing media file or replace this image URL with the correct attachment URL.', 'linkvitals' );
+                }
             } elseif ( in_array( $link_type, array( 'download', 'media' ), true ) ) {
                 $suggestion = __( 'Suggestion: restore the missing file or replace this file URL with the current file URL.', 'linkvitals' );
             } elseif ( $this->is_anchor_href_occurrence( $occurrence_summary ) ) {
@@ -267,6 +272,14 @@ class LHA_List_Table extends WP_List_Table {
 
         // Row actions
         $actions = array();
+
+        if ( $has_occurrences && LHA_Image_Repair::is_repairable_link( $item ) ) {
+            $actions['repair_image'] = sprintf(
+                '<a href="#" class="lha-action-repair-image" data-link-id="%d" style="color:#00a32a;font-weight:600;">%s</a>',
+                absint( $item['id'] ),
+                esc_html__( 'Find & Use Original', 'linkvitals' )
+            );
+        }
 
         // Primary replacement action for actual failures.
         if ( $has_occurrences && in_array( $item['status'], array( 'broken', 'server_error', 'dns_error', 'timeout', 'ssl_error' ), true ) ) {
@@ -452,6 +465,12 @@ class LHA_List_Table extends WP_List_Table {
         }
 
         $this->bulk_action_processed = true;
+
+        // image-repair.js intentionally submits one AJAX request per link so a
+        // large selection cannot block one HTTP request until gateway timeout.
+        if ( 'repair_image_variants' === $action ) {
+            return;
+        }
 
         // For replace_url and unlink, redirect to confirmation page.
         if ( in_array( $action, array( 'replace_url', 'unlink' ), true ) ) {

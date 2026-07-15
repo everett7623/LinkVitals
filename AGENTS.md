@@ -17,6 +17,8 @@ root is a development and packaging workspace.
   `class-lha-*.php` file.
 - `linkvitals/assets/css/admin.css` - admin-only stylesheet.
 - `linkvitals/assets/js/admin.js` - admin-only JavaScript.
+- `linkvitals/assets/js/image-repair.js` - bounded row and bulk interactions
+  for missing WordPress image-size repairs.
 - `linkvitals/languages/` - translation template and Chinese
   translation files.
 - `tests/run.php` - dependency-free PHP contract tests for core static behavior.
@@ -142,6 +144,8 @@ Recent cleanup already performed:
   source post content
 - made queue claims atomic with per-batch claim tokens and prevented scan
   completion while another worker still owns queue items
+- added verified original-image recovery for internal 404 image-size URLs,
+  with one-click repair and sequential selected-row AJAX processing
 
 Known gaps:
 
@@ -196,6 +200,8 @@ The scanning pipeline is orchestrated by `LHA_Scanner`:
 - `LHA_Settings` - settings rendering, sanitization, validation, cron reschedule.
 - `LHA_Repair` - URL replacement, unlinking in post content, repair snapshots,
   and guarded rollback.
+- `LHA_Image_Repair` - recognizes WordPress dimension suffixes, verifies an
+  internal original image, and delegates changes to `LHA_Repair`.
 - `LHA_Exporter` - CSV download.
 - `LHA_Logger` - audit log writes and log retention cleanup.
 - `LHA_Internal_Analyzer` - inbound/outbound counts, orphan detection, HTTPS
@@ -299,6 +305,7 @@ Current actions include:
 - `lha_unignore_link`
 - `lha_export_csv`
 - `lha_replace_url`
+- `lha_repair_image_variant`
 - `lha_unlink`
 - `lha_rollback_repair`
 - `lha_get_replace_preview`

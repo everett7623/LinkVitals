@@ -27,6 +27,7 @@ class LHA_Admin {
         add_action( 'wp_ajax_lha_unignore_link', array( $this, 'ajax_unignore_link' ) );
         add_action( 'wp_ajax_lha_export_csv', array( $this, 'ajax_export_csv' ) );
         add_action( 'wp_ajax_lha_replace_url', array( $this, 'ajax_replace_url' ) );
+        add_action( 'wp_ajax_lha_repair_image_variant', array( $this, 'ajax_repair_image_variant' ) );
         add_action( 'wp_ajax_lha_unlink', array( $this, 'ajax_unlink' ) );
         add_action( 'wp_ajax_lha_rollback_repair', array( $this, 'ajax_rollback_repair' ) );
         add_action( 'wp_ajax_lha_get_replace_preview', array( $this, 'ajax_get_replace_preview' ) );
@@ -119,6 +120,14 @@ class LHA_Admin {
             true
         );
 
+        wp_enqueue_script(
+            'lha-image-repair-js',
+            LHA_PLUGIN_URL . 'assets/js/image-repair.js',
+            array( 'jquery', 'lha-admin-js' ),
+            LHA_VERSION,
+            true
+        );
+
         wp_localize_script( 'lha-admin-js', 'lhaAdmin', array(
             'ajaxUrl' => admin_url( 'admin-ajax.php' ),
             'nonce'   => wp_create_nonce( 'lha_ajax_nonce' ),
@@ -152,6 +161,11 @@ class LHA_Admin {
                 'purge_repairs_confirm' => __( 'Purge old rolled-back repair history according to the retention setting?', 'linkvitals' ),
                 'reset_data_prompt' => __( 'Type RESET to permanently delete all plugin scan data, logs, and repair history.', 'linkvitals' ),
                 'reset_data_invalid' => __( 'Reset cancelled. You must type RESET exactly.', 'linkvitals' ),
+                'image_repair_checking' => __( 'Checking original image...', 'linkvitals' ),
+                'image_repair_failed' => __( 'Image repair failed', 'linkvitals' ),
+                'image_repair_no_selection' => __( 'Select at least one link to repair.', 'linkvitals' ),
+                'image_repair_progress' => __( 'Repairing image %1$d of %2$d...', 'linkvitals' ),
+                'image_repair_complete' => __( 'Image repair complete: %1$d repaired, %2$d failed.', 'linkvitals' ),
             ),
         ) );
     }
@@ -417,7 +431,7 @@ class LHA_Admin {
                 ?>
             </ul>
 
-            <form method="get">
+            <form method="get" id="lha-report-form">
                 <input type="hidden" name="page" value="lha-dashboard" />
                 <input type="hidden" name="tab" value="report" />
                 <?php
@@ -1164,6 +1178,25 @@ class LHA_Admin {
         } else {
             wp_send_json_error( $result );
         }
+    }
+
+    /**
+     * AJAX: Verify and repair one missing WordPress image-size URL.
+     *
+     * Both success and failure responses use the same data fields from
+     * LHA_Image_Repair so the row and bulk clients share one contract.
+     */
+    public function ajax_repair_image_variant(): void {
+        LHA_Security::ajax_check();
+
+        $link_id = isset( $_POST['link_id'] ) ? absint( $_POST['link_id'] ) : 0;
+        $result = ( new LHA_Image_Repair() )->repair_link( $link_id );
+        if ( $result['success'] ) {
+            wp_send_json_success( $result );
+            return;
+        }
+
+        wp_send_json_error( $result );
     }
 
     /**

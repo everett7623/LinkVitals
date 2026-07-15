@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.2
+Stable tag: 0.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -27,6 +27,7 @@ LinkVitals helps WordPress site owners maintain healthy links across their entir
 * CSV export of reports
 * Rate limiting for external domain requests
 * WP-Cron scheduled automatic scans
+* Verified one-click and selected-row repairs for missing WordPress image sizes
 * No external service dependencies
 * WordPress native admin UI
 
@@ -88,6 +89,11 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.3 =
+* Added verified original-image recovery for missing internal WordPress image sizes
+* Added one-click row repair and sequential selected-row bulk repair without long blocking requests
+* Limited automatic image repairs to internal 404 images with recognized dimension suffixes and reusable repair history
 
 = 0.3.2 =
 * Made queue batch claims atomic so concurrent AJAX and WP-Cron workers cannot process the same content objects
@@ -197,6 +203,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.3 =
+Adds safe, reversible repair actions for deleted WordPress image-size files when the original image is still available.
 
 = 0.3.2 =
 Improves scan reliability when AJAX and WP-Cron process the queue concurrently.
