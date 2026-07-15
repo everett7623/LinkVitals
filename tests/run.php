@@ -6,11 +6,51 @@
  */
 
 define( 'ABSPATH', dirname( __DIR__ ) . DIRECTORY_SEPARATOR );
+define( 'ARRAY_A', 'ARRAY_A' );
+
+$GLOBALS['lha_test_options'] = array();
+$GLOBALS['lha_test_db_events'] = array();
 
 if ( ! function_exists( 'sanitize_key' ) ) {
     function sanitize_key( mixed $key ): string {
         $key = strtolower( (string) $key );
         return preg_replace( '/[^a-z0-9_\-]/', '', $key ) ?? '';
+    }
+}
+
+if ( ! function_exists( 'absint' ) ) {
+    function absint( mixed $value ): int {
+        return abs( (int) $value );
+    }
+}
+
+if ( ! function_exists( 'current_time' ) ) {
+    function current_time( string $type ): string {
+        unset( $type );
+        return '2026-07-15 12:00:00';
+    }
+}
+
+if ( ! function_exists( 'wp_generate_uuid4' ) ) {
+    function wp_generate_uuid4(): string {
+        static $counter = 0;
+        $counter++;
+        return sprintf( '00000000-0000-4000-8000-%012d', $counter );
+    }
+}
+
+if ( ! function_exists( 'get_option' ) ) {
+    function get_option( string $name, mixed $default = false ): mixed {
+        return array_key_exists( $name, $GLOBALS['lha_test_options'] )
+            ? $GLOBALS['lha_test_options'][ $name ]
+            : $default;
+    }
+}
+
+if ( ! function_exists( 'update_option' ) ) {
+    function update_option( string $name, mixed $value ): bool {
+        $GLOBALS['lha_test_options'][ $name ] = $value;
+        return true;
     }
 }
 
@@ -35,6 +75,130 @@ if ( ! function_exists( 'mb_substr' ) ) {
 
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-extractor.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php';
+
+class LHA_Test_WPDB {
+
+    public string $prefix = 'wp_';
+
+    /** @var array<int, array<string, mixed>> */
+    public array $rows;
+
+    /** @var array<int, string> */
+    public array $operations = array();
+
+    /** @param array<int, array<string, mixed>> $rows */
+    public function __construct( array $rows = array() ) {
+        $this->rows = $rows;
+    }
+
+    public function prepare( string $query, mixed ...$args ): string {
+        $index = 0;
+
+        return preg_replace_callback(
+            '/%[ds]/',
+            static function( array $match ) use ( $args, &$index ): string {
+                $value = $args[ $index++ ];
+                if ( '%d' === $match[0] ) {
+                    return (string) (int) $value;
+                }
+
+                return "'" . str_replace( "'", "''", (string) $value ) . "'";
+            },
+            $query
+        ) ?? $query;
+    }
+
+    public function query( string $query ): int|false {
+        if ( ! str_contains( $query, "SET status = 'processing', claim_token" ) ) {
+            return false;
+        }
+
+        $this->operations[] = 'claim_update';
+        preg_match( "/claim_token = '([^']+)'/", $query, $token_match );
+        preg_match( "/updated_at = '([^']+)'/", $query, $time_match );
+        preg_match( '/LIMIT ([0-9]+)/', $query, $limit_match );
+
+        $pending = array_values(
+            array_filter(
+                $this->rows,
+                static fn( array $row ): bool => 'pending' === $row['status']
+            )
+        );
+        usort( $pending, array( $this, 'compare_queue_rows' ) );
+        $pending = array_slice( $pending, 0, (int) ( $limit_match[1] ?? 0 ) );
+        $claimed_ids = array_map( 'intval', array_column( $pending, 'id' ) );
+
+        foreach ( $this->rows as &$row ) {
+            if ( in_array( (int) $row['id'], $claimed_ids, true ) ) {
+                $row['status']      = 'processing';
+                $row['claim_token'] = $token_match[1] ?? '';
+                $row['updated_at']  = $time_match[1] ?? '';
+            }
+        }
+        unset( $row );
+
+        return count( $claimed_ids );
+    }
+
+    public function get_results( string $query, mixed $output = null ): array {
+        unset( $output );
+
+        if ( str_contains( $query, 'wp_lha_links' ) ) {
+            $GLOBALS['lha_test_db_events'][] = 'link_select';
+            return array();
+        }
+
+        if ( str_contains( $query, 'claim_token' ) ) {
+            $this->operations[] = 'claim_select';
+            preg_match( "/claim_token = '([^']+)'/", $query, $token_match );
+            $token = $token_match[1] ?? '';
+            $rows  = array_values(
+                array_filter(
+                    $this->rows,
+                    static fn( array $row ): bool => 'processing' === $row['status'] && $token === $row['claim_token']
+                )
+            );
+            usort( $rows, array( $this, 'compare_queue_rows' ) );
+            return $rows;
+        }
+
+        $this->operations[] = 'pending_select';
+        return array();
+    }
+
+    private function compare_queue_rows( array $left, array $right ): int {
+        return array( $left['priority'], $left['created_at'], $left['id'] )
+            <=> array( $right['priority'], $right['created_at'], $right['id'] );
+    }
+}
+
+class LHA_Test_Queue extends LHA_Queue {
+
+    /** @var array<string, int> */
+    private array $counts;
+
+    /** @param array<string, int> $counts */
+    public function __construct( array $counts ) {
+        $this->counts = $counts;
+    }
+
+    public function reset_stuck( int $minutes = 10 ): int {
+        unset( $minutes );
+        return 0;
+    }
+
+    public function get_pending( int $batch_size = 20 ): array {
+        unset( $batch_size );
+        return array();
+    }
+
+    public function get_counts(): array {
+        $GLOBALS['lha_test_db_events'][] = 'queue_counts';
+        return $this->counts;
+    }
+}
 
 $tests = array();
 
@@ -199,6 +363,75 @@ lha_test(
             array_column( $links, 'url' )
         );
         lha_assert_same( array( 'image', 'image', 'image' ), array_column( $links, 'link_type' ) );
+    }
+);
+
+lha_test(
+    'claims queue batches before selecting their rows',
+    static function(): void {
+        $wpdb = new LHA_Test_WPDB(
+            array(
+                array( 'id' => 1, 'status' => 'pending', 'priority' => 5, 'created_at' => '2026-07-15 10:00:00', 'claim_token' => '' ),
+                array( 'id' => 2, 'status' => 'pending', 'priority' => 1, 'created_at' => '2026-07-15 11:00:00', 'claim_token' => '' ),
+                array( 'id' => 3, 'status' => 'pending', 'priority' => 1, 'created_at' => '2026-07-15 09:00:00', 'claim_token' => '' ),
+            )
+        );
+        $GLOBALS['wpdb'] = $wpdb;
+
+        $queue = new LHA_Queue();
+        $first = $queue->get_pending( 2 );
+        $second = $queue->get_pending( 2 );
+
+        lha_assert_same( array( 3, 2 ), array_map( 'intval', array_column( $first, 'id' ) ) );
+        lha_assert_same( array( 1 ), array_map( 'intval', array_column( $second, 'id' ) ) );
+        lha_assert_same(
+            array( 'claim_update', 'claim_select', 'claim_update', 'claim_select' ),
+            $wpdb->operations
+        );
+    }
+);
+
+lha_test(
+    'declares indexed queue claim tokens in the database schema',
+    static function(): void {
+        $schema = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php' );
+
+        lha_assert_same( true, is_string( $schema ) && str_contains( $schema, "claim_token varchar(36) NOT NULL DEFAULT ''" ) );
+        lha_assert_same( true, is_string( $schema ) && str_contains( $schema, 'KEY claim_token (claim_token)' ) );
+    }
+);
+
+lha_test(
+    'keeps the scan running while another worker owns queue items',
+    static function(): void {
+        $GLOBALS['lha_test_options'] = array(
+            'lha_scan_status' => 'running',
+            'lha_settings'    => array( 'batch_size' => 20 ),
+        );
+        $GLOBALS['lha_test_db_events'] = array();
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB();
+
+        $scanner = ( new ReflectionClass( LHA_Scanner::class ) )->newInstanceWithoutConstructor();
+        $queue_property = new ReflectionProperty( LHA_Scanner::class, 'queue' );
+        $queue_property->setAccessible( true );
+        $queue_property->setValue(
+            $scanner,
+            new LHA_Test_Queue(
+                array(
+                    'pending'    => 0,
+                    'processing' => 1,
+                    'done'       => 2,
+                    'failed'     => 0,
+                    'paused'     => 0,
+                )
+            )
+        );
+
+        $result = $scanner->process_queue_batch();
+
+        lha_assert_same( array( 'status' => 'running', 'processed' => 0 ), $result );
+        lha_assert_same( 'running', $GLOBALS['lha_test_options']['lha_scan_status'] );
+        lha_assert_same( array( 'queue_counts' ), $GLOBALS['lha_test_db_events'] );
     }
 );
 

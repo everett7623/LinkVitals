@@ -74,10 +74,11 @@ class LHA_Queue {
                 'priority'    => $priority,
                 'attempts'    => 0,
                 'last_error'  => '',
+                'claim_token' => '',
                 'created_at'  => $now,
                 'updated_at'  => $now,
             ),
-            array( '%s', '%d', '%s', '%s', '%d', '%d', '%s', '%s', '%s' )
+            array( '%s', '%d', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s' )
         );
 
         return $result ? (int) $wpdb->insert_id : false;
@@ -95,42 +96,40 @@ class LHA_Queue {
     public function get_pending( int $batch_size = 20 ): array {
         global $wpdb;
 
-        $now = current_time( 'mysql' );
+        $batch_size  = max( 1, min( 100, $batch_size ) );
+        $now         = current_time( 'mysql' );
+        $claim_token = wp_generate_uuid4();
 
-        // Select pending items ordered by priority and creation time.
+        // A single ordered UPDATE prevents concurrent workers from claiming
+        // the same rows. The token then identifies only this worker's batch.
+        $claimed = $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$this->table}
+                 SET status = 'processing', claim_token = %s, updated_at = %s
+                 WHERE status = 'pending'
+                 ORDER BY priority ASC, created_at ASC, id ASC
+                 LIMIT %d",
+                $claim_token,
+                $now,
+                $batch_size
+            )
+        );
+
+        if ( ! $claimed ) {
+            return array();
+        }
+
         $items = $wpdb->get_results(
             $wpdb->prepare(
-                "SELECT * FROM {$this->table} WHERE status = %s ORDER BY priority ASC, created_at ASC LIMIT %d",
-                'pending',
-                $batch_size
+                "SELECT * FROM {$this->table}
+                 WHERE status = 'processing' AND claim_token = %s
+                 ORDER BY priority ASC, created_at ASC, id ASC",
+                $claim_token
             ),
             ARRAY_A
         );
 
-        if ( empty( $items ) ) {
-            return array();
-        }
-
-        // Atomically mark retrieved items as 'processing'.
-        $ids         = array_column( $items, 'id' );
-        $placeholders = implode( ',', array_fill( 0, count( $ids ), '%d' ) );
-
-        $wpdb->query(
-            $wpdb->prepare(
-                "UPDATE {$this->table} SET status = 'processing', updated_at = %s WHERE id IN ({$placeholders})",
-                $now,
-                ...$ids
-            )
-        );
-
-        // Update the status in returned items to reflect the transition.
-        foreach ( $items as &$item ) {
-            $item['status']     = 'processing';
-            $item['updated_at'] = $now;
-        }
-        unset( $item );
-
-        return $items;
+        return $items ?: array();
     }
 
     /**
@@ -146,11 +145,12 @@ class LHA_Queue {
         return (bool) $wpdb->update(
             $this->table,
             array(
-                'status'     => $status,
-                'updated_at' => current_time( 'mysql' ),
+                'status'      => $status,
+                'claim_token' => '',
+                'updated_at'  => current_time( 'mysql' ),
             ),
             array( 'id' => $id ),
-            array( '%s', '%s' ),
+            array( '%s', '%s', '%s' ),
             array( '%d' )
         );
     }
@@ -193,22 +193,24 @@ class LHA_Queue {
             $wpdb->update(
                 $this->table,
                 array(
-                    'status'     => 'failed',
-                    'updated_at' => $now,
+                    'status'      => 'failed',
+                    'claim_token' => '',
+                    'updated_at'  => $now,
                 ),
                 array( 'id' => $id ),
-                array( '%s', '%s' ),
+                array( '%s', '%s', '%s' ),
                 array( '%d' )
             );
         } else {
             $wpdb->update(
                 $this->table,
                 array(
-                    'status'     => 'pending',
-                    'updated_at' => $now,
+                    'status'      => 'pending',
+                    'claim_token' => '',
+                    'updated_at'  => $now,
                 ),
                 array( 'id' => $id ),
-                array( '%s', '%s' ),
+                array( '%s', '%s', '%s' ),
                 array( '%d' )
             );
         }
@@ -278,7 +280,7 @@ class LHA_Queue {
 
         $result = $wpdb->query(
             $wpdb->prepare(
-                "UPDATE {$this->table} SET status = 'pending', updated_at = %s WHERE status = 'processing' AND updated_at < %s",
+                "UPDATE {$this->table} SET status = 'pending', claim_token = '', updated_at = %s WHERE status = 'processing' AND updated_at < %s",
                 $now,
                 $cutoff
             )

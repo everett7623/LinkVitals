@@ -162,6 +162,13 @@ class LHA_Scanner {
         $items = $this->queue->get_pending( $batch_size );
 
         if ( empty( $items ) ) {
+            // Another worker may already own queue items. Do not complete the
+            // scan before that worker finishes extracting and enqueuing links.
+            $counts = $this->queue->get_counts();
+            if ( ! empty( $counts['pending'] ) || ! empty( $counts['processing'] ) ) {
+                return array( 'status' => 'running', 'processed' => 0 );
+            }
+
             // Step 5/6: No pending items — check for unchecked links.
             $unchecked = LHA_DB::get_unchecked_links( $batch_size );
 
