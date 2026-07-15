@@ -1,0 +1,1202 @@
+# Copyright (C) 2026 everettlabs
+# This file is distributed under the same license as the LinkVitals package.
+msgid ""
+msgstr ""
+"Project-Id-Version: LinkVitals 0.3.1\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/linkvitals\n"
+"POT-Creation-Date: 2026-07-15 00:00+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Manual\n"
+"X-Domain: linkvitals\n"
+
+#. Plugin Name of the plugin
+msgid "LinkVitals"
+msgstr ""
+
+#. Description of the plugin
+msgid "Comprehensive link health audit plugin for WordPress. Detects broken links, redirects, timeouts, SSL errors, orphaned pages, and SEO link risks across posts, pages, menus, and custom post types."
+msgstr ""
+
+#: linkvitals.php
+msgid "Dashboard"
+msgstr ""
+
+#: linkvitals.php
+msgid "Settings"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "LinkVitals"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Links Report"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Internal Links"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "SEO Check"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Logs"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Permission denied."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Total Links"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Internal"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "External"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Broken"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "404 Errors"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "5xx Errors"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Redirects"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Timeouts"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "SSL Errors"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Ignored"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Last Scan:"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Never"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Next Scheduled Scan:"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Not scheduled"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Start Full Scan"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Scan New / Updated Content"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Recheck Broken Links"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Pause Scan"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Resume Scan"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Export CSV"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "All"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "404"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "5xx"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Timeout"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "SSL Error"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Images"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Anchors"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Search URL"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Orphaned Pages"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Low Outbound"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Title"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Type"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Inbound Links"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Outbound Links"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Status"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Actions"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "No data available. Run a scan first."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Orphaned"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "OK"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Edit"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Date"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Action"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "URL"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Message"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "User"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "No logs yet."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "External Links"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Missing nofollow"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Missing noopener"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "HTTP (not HTTPS)"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "These are suggestions for SEO best practices. Not all external links need nofollow - use your judgment."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Missing noopener/noreferrer"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "HTTP links"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Source"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Anchor Text"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "nofollow"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "noopener"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "HTTPS"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Issues"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "No external links found. Run a scan first."
+msgstr ""
+
+#: includes/class-lha-admin.php
+#, php-format
+msgid "LinkVitals: %d broken link(s) detected on your site."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "View Report"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Scanning..."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Paused"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Scan completed!"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "An error occurred."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Are you sure you want to replace this URL?"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Are you sure you want to unlink this URL? The anchor text will be preserved."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Invalid link ID."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Link not found."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Link ignored by user"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Link unignored by user"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Link ignored by bulk action"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Link unignored by bulk action"
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Invalid URL."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "Both old URL and new URL are required."
+msgstr ""
+
+#: includes/class-lha-admin.php
+msgid "New URL must be different from old URL."
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "HTTP Code"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Response"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Last Checked"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Recheck"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Ignore"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Unignore"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Edit Source"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Replace URL"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Unlink"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "No links found. Run a scan to discover links."
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "ago"
+msgstr ""
+
+#: includes/class-lha-list-table.php
+msgid "Redirect to:"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "You do not have permission to manage settings."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Settings saved."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Scanning"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Automatic Scanning"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Enable scheduled automatic scanning"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Scan Frequency"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Daily"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Weekly"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Monthly"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Batch Size"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Number of items to process per batch (1-100)."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Checking"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "HTTP Timeout (seconds)"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Seconds to wait for a response (1-30)."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Max Redirects"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Maximum number of redirects to follow (1-10)."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Check Options"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Check external links"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Check image links"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Check media files (video/audio)"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Check anchor links (#fragments)"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Check nofollow/sponsored attributes"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Ignore Lists"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Ignore Domains"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "One domain per line. Use *.example.com for wildcard subdomains."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Ignore URL Patterns"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "One pattern per line. Supports * wildcard (e.g., https://example.com/private/*)."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Notifications"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Email Notifications"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Send email when new broken links are found"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Notification Email"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Leave empty to use the site administrator email."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Data"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Uninstall"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Delete all plugin data when plugin is uninstalled"
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Warning: This will permanently delete all scan data, logs, and settings."
+msgstr ""
+
+#: includes/class-lha-settings.php
+msgid "Save Settings"
+msgstr ""
+
+#: includes/class-lha-security.php
+msgid "You do not have permission to perform this action."
+msgstr ""
+
+#: includes/class-lha-security.php
+msgid "Security check failed. Please try again."
+msgstr ""
+
+#: includes/class-lha-security.php
+msgid "Security check failed."
+msgstr ""
+
+#: includes/class-lha-cron.php
+msgid "Every 5 Minutes (LHA)"
+msgstr ""
+
+#: includes/class-lha-cron.php
+msgid "Daily (LHA)"
+msgstr ""
+
+#: includes/class-lha-cron.php
+msgid "Weekly (LHA)"
+msgstr ""
+
+#: includes/class-lha-cron.php
+msgid "Monthly (LHA)"
+msgstr ""
+
+#: includes/class-lha-cron.php
+msgid "Scheduled incremental scan started"
+msgstr ""
+
+#: includes/class-lha-cron.php
+#, php-format
+msgid "[%s] Link Health Audit Report"
+msgstr ""
+
+#: includes/class-lha-cron.php
+#, php-format
+msgid "Link Health Audit Report for %1$s\n\nScan completed: %2$s\n\nBroken Links: %3$d\n404 Errors: %4$d\n5xx Errors: %5$d\nTimeouts: %6$d\nSSL Errors: %7$d\nDNS Errors: %8$d\n\nView full report: %9$s"
+msgstr ""
+
+#: includes/class-lha-cron.php
+#, php-format
+msgid "Email notification sent to %s"
+msgstr ""
+
+#: includes/class-lha-repair.php
+msgid "Invalid URLs provided."
+msgstr ""
+
+#: includes/class-lha-repair.php
+msgid "URL not found in database."
+msgstr ""
+
+#: includes/class-lha-repair.php
+msgid "No occurrences found for this URL."
+msgstr ""
+
+#: includes/class-lha-repair.php
+#, php-format
+msgid "Replaced %1$d occurrence(s) of %2$s with %3$s"
+msgstr ""
+
+#: includes/class-lha-repair.php
+#, php-format
+msgid "Replaced %d occurrence(s)."
+msgstr ""
+
+#: includes/class-lha-repair.php
+#, php-format
+msgid "Post #%d not found."
+msgstr ""
+
+#: includes/class-lha-repair.php
+#, php-format
+msgid "Failed to update post #%d."
+msgstr ""
+
+#: includes/class-lha-repair.php
+#, php-format
+msgid "Term #%d not found."
+msgstr ""
+
+#: includes/class-lha-repair.php
+#, php-format
+msgid "Failed to update term #%d."
+msgstr ""
+
+#: includes/class-lha-repair.php
+#, php-format
+msgid "Unlinked %d occurrence(s)."
+msgstr ""
+
+#: includes/class-lha-scanner.php
+#, php-format
+msgid "Menu: %s"
+msgstr ""
+
+#: includes/class-lha-scanner.php
+#, php-format
+msgid "%1$s: %2$s"
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-ai.php:129
+msgid "AI not configured. Please set an API key in Settings."
+msgstr ""
+
+#: includes/class-lha-admin.php:1112
+msgid "AI request failed."
+msgstr ""
+
+#: includes/class-lha-admin.php:1208
+msgid "All plugin data has been reset."
+msgstr ""
+
+#: includes/class-lha-admin.php:571
+msgid "All selected links will be replaced with this URL."
+msgstr ""
+
+#: includes/class-lha-admin.php:128
+msgid "Are you sure?"
+msgstr ""
+
+#: includes/class-lha-admin.php:462
+#: includes/class-lha-admin.php:484
+msgid "Back to Report"
+msgstr ""
+
+#: includes/class-lha-admin.php:455
+msgid "Bulk replace completed. %d occurrence(s) updated."
+msgstr ""
+
+#: includes/class-lha-admin.php:512
+msgid "Bulk Replace URL"
+msgstr ""
+
+#: includes/class-lha-admin.php:512
+msgid "Bulk Unlink"
+msgstr ""
+
+#: includes/class-lha-admin.php:477
+msgid "Bulk unlink completed. %d occurrence(s) unlinked."
+msgstr ""
+
+#: includes/class-lha-admin.php:577
+#: includes/class-lha-admin.php:583
+#: includes/class-lha-list-table.php:214
+msgid "Cancel"
+msgstr ""
+
+#: includes/class-lha-settings.php:373
+msgid "Chinese (Simplified)"
+msgstr ""
+
+#: includes/class-lha-ai.php:327
+msgid "Claude API key not configured."
+msgstr ""
+
+#: includes/class-lha-admin.php:329
+msgid "Clean Orphaned Links"
+msgstr ""
+
+#: includes/class-lha-admin.php:1158
+msgid "Cleaned %d orphaned link record(s)."
+msgstr ""
+
+#: includes/class-lha-admin.php:576
+msgid "Confirm Replace"
+msgstr ""
+
+#: includes/class-lha-admin.php:582
+msgid "Confirm Unlink"
+msgstr ""
+
+#: includes/class-lha-ai.php:434
+msgid "Connected! Model: %1$s, Tokens used: %2$d"
+msgstr ""
+
+#: includes/class-lha-ai.php:441
+msgid "Connection failed."
+msgstr ""
+
+#: includes/class-lha-admin.php:326
+msgid "Database maintenance tools for the plugin data."
+msgstr ""
+
+#: includes/class-lha-admin.php:367
+msgid "DNS Error"
+msgstr ""
+
+#: includes/class-lha-admin.php:270
+msgid "DNS Errors"
+msgstr ""
+
+#: includes/class-lha-admin.php:138
+msgid "Done (%d)"
+msgstr ""
+
+#: includes/class-lha-settings.php:285
+msgid "Enable if your server needs a proxy to access external websites (e.g., behind GFW)."
+msgstr ""
+
+#: includes/class-lha-settings.php:279
+msgid "Enable Proxy"
+msgstr ""
+
+#: includes/class-lha-settings.php:372
+msgid "English"
+msgstr ""
+
+#: includes/class-lha-list-table.php:211
+msgid "Enter new URL..."
+msgstr ""
+
+#: includes/class-lha-list-table.php:226
+msgid "Fix URL"
+msgstr ""
+
+#: includes/class-lha-admin.php:137
+msgid "Fixed"
+msgstr ""
+
+#: includes/class-lha-admin.php:368
+msgid "Forbidden"
+msgstr ""
+
+#: includes/class-lha-settings.php:310
+msgid "HTTP / HTTPS"
+msgstr ""
+
+#: includes/class-lha-admin.php:614
+msgid "HTTP Links"
+msgstr ""
+
+#: includes/class-lha-admin.php:635
+msgid "HTTP on HTTPS site"
+msgstr ""
+
+#: includes/class-lha-settings.php:276
+msgid "HTTP Proxy"
+msgstr ""
+
+#: includes/class-lha-settings.php:368
+msgid "Interface Language"
+msgstr ""
+
+#: includes/class-lha-admin.php:416
+msgid "Invalid bulk action."
+msgstr ""
+
+#: includes/class-lha-admin.php:1124
+msgid "Invalid provider."
+msgstr ""
+
+#: includes/class-lha-admin.php:134
+msgid "Invalid URL"
+msgstr ""
+
+#: includes/class-lha-settings.php:364
+msgid "Language"
+msgstr ""
+
+#: includes/class-lha-admin.php:325
+msgid "Maintenance"
+msgstr ""
+
+#: includes/class-lha-admin.php:568
+msgid "New URL"
+msgstr ""
+
+#: includes/class-lha-admin.php:630
+msgid "No HTTP links found. Your internal links are all using HTTPS."
+msgstr ""
+
+#: includes/class-lha-admin.php:424
+msgid "No links selected."
+msgstr ""
+
+#: includes/class-lha-repair.php:260
+#: includes/class-lha-repair.php:370
+msgid "No occurrences found. Stale record cleaned."
+msgstr ""
+
+#: includes/class-lha-list-table.php:193
+msgid "No source occurrence found (stale record)."
+msgstr ""
+
+#: includes/class-lha-ai.php:295
+msgid "OpenAI API key not configured."
+msgstr ""
+
+#: includes/class-lha-admin.php:130
+msgid "Original URL missing"
+msgstr ""
+
+#: includes/class-lha-admin.php:131
+msgid "Please enter a URL"
+msgstr ""
+
+#: includes/class-lha-admin.php:440
+msgid "Please enter a valid replacement URL."
+msgstr ""
+
+#: includes/class-lha-admin.php:625
+msgid "Protocol Issue"
+msgstr ""
+
+#: includes/class-lha-settings.php:290
+msgid "Proxy Host"
+msgstr ""
+
+#: includes/class-lha-settings.php:298
+msgid "Proxy Port"
+msgstr ""
+
+#: includes/class-lha-settings.php:306
+msgid "Proxy Type"
+msgstr ""
+
+#: includes/class-lha-admin.php:332
+msgid "Purge Old Logs"
+msgstr ""
+
+#: includes/class-lha-admin.php:1176
+msgid "Purged %d old log entry(ies)."
+msgstr ""
+
+#: includes/class-lha-admin.php:133
+msgid "Recheck failed"
+msgstr ""
+
+#: includes/class-lha-admin.php:139
+msgid "Replaced %d occurrence(s)"
+msgstr ""
+
+#: includes/class-lha-repair.php:310
+msgid "Replaced URL in %s"
+msgstr ""
+
+#: includes/class-lha-admin.php:129
+msgid "Request failed"
+msgstr ""
+
+#: includes/class-lha-admin.php:335
+msgid "Reset All Data"
+msgstr ""
+
+#: includes/class-lha-admin.php:142
+#: includes/class-lha-list-table.php:213
+msgid "Save"
+msgstr ""
+
+#: includes/class-lha-admin.php:136
+msgid "Save failed"
+msgstr ""
+
+#: includes/class-lha-admin.php:135
+msgid "Saving..."
+msgstr ""
+
+#: includes/class-lha-settings.php:375
+msgid "Select the language for the plugin interface."
+msgstr ""
+
+#: includes/class-lha-admin.php:363
+msgid "Server Errors"
+msgstr ""
+
+#: includes/class-lha-settings.php:311
+msgid "SOCKS5"
+msgstr ""
+
+#: includes/class-lha-admin.php:530
+msgid "Sources"
+msgstr ""
+
+#: includes/class-lha-admin.php:580
+msgid "This will remove the link tags from content but keep the anchor text. This action cannot be undone."
+msgstr ""
+
+#: includes/class-lha-ai.php:285
+msgid "Unknown AI provider."
+msgstr ""
+
+#: includes/class-lha-ai.php:426
+msgid "Unknown provider."
+msgstr ""
+
+#: includes/class-lha-admin.php:141
+msgid "Unlink failed"
+msgstr ""
+
+#: includes/class-lha-admin.php:140
+msgid "Unlinked (%d)"
+msgstr ""
+
+#: includes/class-lha-repair.php:411
+msgid "Unlinked URL from %s"
+msgstr ""
+
+#: includes/class-lha-admin.php:132
+msgid "URL is the same"
+msgstr ""
+
+#: includes/class-lha-list-table.php:237
+msgid "Use final URL"
+msgstr ""
+
+#: includes/class-lha-settings.php:283
+msgid "Use HTTP proxy for external link checking"
+msgstr ""
+
+#: includes/class-lha-admin.php:68
+msgid "LinkVitals: %d link issue(s) detected on your site."
+msgstr ""
+
+#: includes/class-lha-admin.php:518
+msgid "You have selected %1$d link(s) affecting %2$d content object(s)."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-cron.php:196
+msgid "Link Health Audit Report for %1$s\\n\\nScan completed: %2$s\\n\\nBroken Links: %3$d\\n404 Errors: %4$d\\n5xx Errors: %5$d\\nServer Errors: %6$d\\nTimeouts: %7$d\\nSSL Errors: %8$d\\nDNS Errors: %9$d\\nForbidden: %10$d\\n\\nView full report: %11$s"
+msgstr ""
+
+#: includes/class-lha-admin.php:318
+msgid "Recheck Link Issues"
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-list-table.php:264
+msgid "Enter replacement URL..."
+msgstr ""
+
+#: includes/class-lha-list-table.php:266
+msgid "Replaces the URL in source content. It does not create a redirect."
+msgstr ""
+
+#: includes/class-lha-list-table.php:172
+msgid "Suggestion: fix the server or domain issue, then recheck. Replace the source URL only when the target has moved."
+msgstr ""
+
+#: includes/class-lha-list-table.php:157
+msgid "Suggestion: replace the source URL with the final internal URL. This edits content; it does not create a redirect."
+msgstr ""
+
+#: includes/class-lha-list-table.php:167
+msgid "Suggestion: replace the URL with a live page, remove the link, or create a site redirect if the old URL must keep working."
+msgstr ""
+
+#: includes/class-lha-list-table.php:165
+msgid "Suggestion: restore the missing file or replace this file URL with the current file URL."
+msgstr ""
+
+#: includes/class-lha-list-table.php:163
+msgid "Suggestion: restore the missing media file or replace this image URL with the correct attachment URL."
+msgstr ""
+
+#: includes/class-lha-list-table.php:169
+msgid "Suggestion: restore the missing resource or replace the URL in the source content."
+msgstr ""
+
+#: includes/class-lha-list-table.php:159
+msgid "Suggestion: review the redirect target before replacing the source URL. External redirects may be intentional."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-admin.php:763
+msgid "Active"
+msgstr ""
+
+#: includes/class-lha-admin.php:143
+msgid "Are you sure you want to roll back this repair?"
+msgstr ""
+
+#: includes/class-lha-admin.php:796
+msgid "Audit Logs"
+msgstr ""
+
+#: includes/class-lha-repair.php:560
+msgid "Failed to roll back the repair."
+msgstr ""
+
+#: includes/class-lha-admin.php:1191
+#: includes/class-lha-repair.php:520
+msgid "Invalid repair ID."
+msgstr ""
+
+#: includes/class-lha-admin.php:737
+msgid "Link unlinked"
+msgstr ""
+
+#: includes/class-lha-admin.php:732
+msgid "No repair records yet."
+msgstr ""
+
+#: includes/class-lha-admin.php:739
+msgid "Post #%d"
+msgstr ""
+
+#: includes/class-lha-repair.php:538
+msgid "Post not found."
+msgstr ""
+
+#: includes/class-lha-admin.php:717
+msgid "Repair History"
+msgstr ""
+
+#: includes/class-lha-repair.php:525
+msgid "Repair record not found."
+msgstr ""
+
+#: includes/class-lha-repair.php:586
+msgid "Repair rolled back."
+msgstr ""
+
+#: includes/class-lha-admin.php:727
+#: includes/class-lha-admin.php:770
+msgid "Rollback"
+msgstr ""
+
+#: includes/class-lha-admin.php:145
+msgid "Rollback failed"
+msgstr ""
+
+#: includes/class-lha-admin.php:146
+#: includes/class-lha-admin.php:761
+#: includes/class-lha-admin.php:773
+msgid "Rolled back"
+msgstr ""
+
+#: includes/class-lha-repair.php:564
+msgid "Rolled back from repair history."
+msgstr ""
+
+#: includes/class-lha-repair.php:572
+msgid "Rolled back repair in %s"
+msgstr ""
+
+#: includes/class-lha-admin.php:144
+msgid "Rolling back..."
+msgstr ""
+
+#: includes/class-lha-repair.php:548
+msgid "The content has changed since this repair was recorded. Review the post before rolling back."
+msgstr ""
+
+#: includes/class-lha-repair.php:529
+msgid "This repair has already been rolled back."
+msgstr ""
+
+#: includes/class-lha-repair.php:533
+msgid "This repair type cannot be rolled back automatically."
+msgstr ""
+
+#: includes/class-lha-admin.php:724
+msgid "URL Change"
+msgstr ""
+
+#: includes/class-lha-admin.php:738
+msgid "URL replaced"
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-settings.php:393
+msgid "Auto (site language)"
+msgstr ""
+
+#: includes/class-lha-settings.php:397
+msgid "Auto follows the WordPress site language."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-settings.php:414
+msgid "days"
+msgstr ""
+
+#: includes/class-lha-settings.php:415
+msgid "Keep rolled-back repair records for this many days. Enter 0 to keep them forever. Active rollback records are never purged by this maintenance action."
+msgstr ""
+
+#: includes/class-lha-admin.php:150
+msgid "Maintenance action failed"
+msgstr ""
+
+#: includes/class-lha-admin.php:151
+msgid "Purge logs older than 90 days?"
+msgstr ""
+
+#: includes/class-lha-admin.php:355
+msgid "Purge Old Repair History"
+msgstr ""
+
+#: includes/class-lha-admin.php:152
+msgid "Purge old rolled-back repair history according to the retention setting?"
+msgstr ""
+
+#: includes/class-lha-admin.php:1343
+#: includes/class-lha-admin.php:1353
+msgid "Purged %1$d old repair history record(s) older than %2$d days."
+msgstr ""
+
+#: includes/class-lha-settings.php:410
+msgid "Repair History Retention"
+msgstr ""
+
+#: includes/class-lha-admin.php:1329
+msgid "Repair history retention is set to keep records forever."
+msgstr ""
+
+#: includes/class-lha-admin.php:154
+msgid "Reset cancelled. You must type RESET exactly."
+msgstr ""
+
+#: includes/class-lha-admin.php:1368
+msgid "Reset confirmation failed."
+msgstr ""
+
+#: includes/class-lha-admin.php:149
+msgid "Running..."
+msgstr ""
+
+#: includes/class-lha-admin.php:153
+msgid "Type RESET to permanently delete all plugin scan data, logs, and repair history."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-repair.php:108
+msgid "You do not have permission to edit post #%d."
+msgstr ""

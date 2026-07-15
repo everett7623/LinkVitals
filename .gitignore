@@ -1,0 +1,21 @@
+# Local editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local tooling state
+.codex/
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Generated release artifact
+/linkvitals.zip
+/linkvitals-*.zip

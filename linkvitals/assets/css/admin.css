@@ -1,0 +1,268 @@
+/**
+ * LinkVitals - Admin Styles
+ *
+ * Uses WordPress native admin design language.
+ * No external frameworks or CDN dependencies.
+ */
+
+/* Stats Grid */
+.lha-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.lha-stat-card {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 16px;
+    text-align: center;
+}
+
+.lha-stat-card .lha-stat-number {
+    display: block;
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 1.2;
+    color: #1d2327;
+}
+
+.lha-stat-card .lha-stat-label {
+    display: block;
+    font-size: 12px;
+    color: #646970;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.lha-stat-danger .lha-stat-number {
+    color: #d63638;
+}
+
+.lha-stat-warning .lha-stat-number {
+    color: #dba617;
+}
+
+/* Scan Info */
+.lha-scan-info {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 16px;
+    margin: 20px 0;
+}
+
+.lha-scan-info p {
+    margin: 4px 0;
+}
+
+/* Progress Bar */
+.lha-progress-wrap {
+    background: #fff;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 16px;
+    margin: 20px 0;
+}
+
+.lha-progress-bar {
+    height: 24px;
+    background: #f0f0f1;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #c3c4c7;
+}
+
+.lha-progress-fill {
+    height: 100%;
+    background: #2271b1;
+    border-radius: 12px;
+    transition: width 0.3s ease;
+    min-width: 0;
+}
+
+.lha-progress-text {
+    text-align: center;
+    margin-top: 8px;
+    color: #646970;
+    font-size: 13px;
+}
+
+/* Action Buttons */
+.lha-actions {
+    margin: 20px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Badges */
+.lha-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.lha-badge-ok {
+    background: #edfaef;
+    color: #00a32a;
+}
+
+.lha-badge-danger {
+    background: #fcf0f1;
+    color: #d63638;
+}
+
+.lha-badge-warning {
+    background: #fcf9e8;
+    color: #996800;
+}
+
+.lha-badge-muted {
+    background: #f0f0f1;
+    color: #646970;
+}
+
+/* HTTP Code styling */
+.lha-code-ok {
+    color: #00a32a;
+    font-weight: 600;
+}
+
+.lha-code-redirect {
+    color: #996800;
+    font-weight: 600;
+}
+
+.lha-code-error {
+    color: #d63638;
+    font-weight: 600;
+}
+
+/* List table adjustments */
+.wp-list-table .column-status {
+    width: 90px;
+}
+
+.wp-list-table .column-http_code {
+    width: 80px;
+}
+
+.wp-list-table .column-response_time {
+    width: 80px;
+}
+
+.wp-list-table .column-link_type {
+    width: 90px;
+}
+
+.wp-list-table .column-last_checked {
+    width: 120px;
+}
+
+.wp-list-table .column-url code,
+.wp-list-table .column-url a {
+    word-break: break-all;
+}
+
+/* Subsubsub filter nav */
+.subsubsub {
+    margin-bottom: 10px;
+}
+
+/* Loading spinner */
+.lha-loading {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f0f0f1;
+    border-top: 2px solid #2271b1;
+    border-radius: 50%;
+    animation: lha-spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-left: 8px;
+}
+
+@keyframes lha-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive adjustments */
+@media screen and (max-width: 782px) {
+    .lha-stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .lha-actions {
+        flex-direction: column;
+    }
+
+    .lha-actions .button {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+/* Tab content spacing */
+.lha-tab-content {
+    margin-top: 20px;
+}
+
+/* Nav tab adjustments */
+.nav-tab-wrapper {
+    margin-bottom: 0;
+}
+
+/* Inline edit form */
+.lha-inline-edit {
+    background: #f9f9f9;
+    border: 1px solid #dcdcde;
+    border-radius: 4px;
+    padding: 8px 10px;
+}
+
+.lha-inline-edit input[type="url"] {
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+.lha-inline-status {
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.lha-repair-suggestion,
+.lha-repair-note {
+    color: #646970;
+    display: inline-block;
+    margin-top: 4px;
+}
+
+.lha-repair-note {
+    margin: 0 0 6px;
+}
+
+.lha-redirect-hint code {
+    background: #fcf9e8;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 11px;
+}
+
+/* Row actions highlight for fix actions */
+.row-actions .lha-action-edit-url {
+    font-weight: 600;
+}
+
+/* Success highlight for replaced rows */
+tr[style*="background: rgb(237, 250, 239)"] td {
+    transition: background 0.3s ease;
+}
