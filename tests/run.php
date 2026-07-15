@@ -7,6 +7,8 @@
 
 define( 'ABSPATH', dirname( __DIR__ ) . DIRECTORY_SEPARATOR );
 define( 'ARRAY_A', 'ARRAY_A' );
+define( 'MINUTE_IN_SECONDS', 60 );
+define( 'DAY_IN_SECONDS', 86400 );
 
 $GLOBALS['lha_test_options'] = array();
 $GLOBALS['lha_test_db_events'] = array();
@@ -15,6 +17,24 @@ if ( ! function_exists( 'sanitize_key' ) ) {
     function sanitize_key( mixed $key ): string {
         $key = strtolower( (string) $key );
         return preg_replace( '/[^a-z0-9_\-]/', '', $key ) ?? '';
+    }
+}
+
+if ( ! function_exists( 'sanitize_text_field' ) ) {
+    function sanitize_text_field( mixed $text ): string {
+        return trim( strip_tags( (string) $text ) );
+    }
+}
+
+if ( ! function_exists( 'sanitize_textarea_field' ) ) {
+    function sanitize_textarea_field( mixed $text ): string {
+        return trim( strip_tags( (string) $text ) );
+    }
+}
+
+if ( ! function_exists( 'sanitize_email' ) ) {
+    function sanitize_email( mixed $email ): string {
+        return filter_var( (string) $email, FILTER_SANITIZE_EMAIL );
     }
 }
 
@@ -80,6 +100,25 @@ if ( ! function_exists( 'mb_substr' ) ) {
     }
 }
 
+if ( ! function_exists( 'is_wp_error' ) ) {
+    function is_wp_error( mixed $value ): bool {
+        unset( $value );
+        return false;
+    }
+}
+
+if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
+    function wp_remote_retrieve_response_code( array $response ): int {
+        return (int) ( $response['response']['code'] ?? 0 );
+    }
+}
+
+if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
+    function wp_remote_retrieve_body( array $response ): string {
+        return (string) ( $response['body'] ?? '' );
+    }
+}
+
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-extractor.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-checker.php';
@@ -87,6 +126,10 @@ require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-image-repair.p
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-internal.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-settings.php';
 
 class LHA_Test_WPDB {
 
@@ -512,6 +555,158 @@ lha_test(
 
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'class="lha-stat-card lha-stat-card-link' ) );
         lha_assert_same( true, is_string( $css ) && str_contains( $css, '.lha-stat-card-link:focus' ) );
+    }
+);
+
+lha_test(
+    'parses current OpenAI and Claude structured response envelopes',
+    static function(): void {
+        $ai = new LHA_AI();
+
+        $openai_method = new ReflectionMethod( LHA_AI::class, 'parse_openai_response' );
+        $openai_method->setAccessible( true );
+        $openai = $openai_method->invoke(
+            $ai,
+            array(
+                'response' => array( 'code' => 200 ),
+                'body'     => json_encode(
+                    array(
+                        'status' => 'completed',
+                        'model'  => 'gpt-test',
+                        'output' => array(
+                            array(
+                                'type'    => 'message',
+                                'content' => array(
+                                    array( 'type' => 'output_text', 'text' => '{"suggestions":[]}' ),
+                                ),
+                            ),
+                        ),
+                        'usage' => array( 'total_tokens' => 12 ),
+                    )
+                ),
+            )
+        );
+
+        lha_assert_same( true, $openai['success'] );
+        lha_assert_same( '{"suggestions":[]}', $openai['raw'] );
+        lha_assert_same( 12, $openai['tokens'] );
+
+        $claude_method = new ReflectionMethod( LHA_AI::class, 'parse_claude_response' );
+        $claude_method->setAccessible( true );
+        $claude = $claude_method->invoke(
+            $ai,
+            array(
+                'response' => array( 'code' => 200 ),
+                'body'     => json_encode(
+                    array(
+                        'stop_reason' => 'end_turn',
+                        'model'       => 'claude-test',
+                        'content'     => array(
+                            array( 'type' => 'text', 'text' => '{"suggestions":[]}' ),
+                        ),
+                        'usage' => array( 'input_tokens' => 7, 'output_tokens' => 5 ),
+                    )
+                ),
+            )
+        );
+
+        lha_assert_same( true, $claude['success'] );
+        lha_assert_same( '{"suggestions":[]}', $claude['raw'] );
+        lha_assert_same( 12, $claude['tokens'] );
+    }
+);
+
+lha_test(
+    'keeps AI suggestions inside the server candidate whitelist',
+    static function(): void {
+        $candidates = array(
+            array(
+                'source_post_id' => 10,
+                'title'          => 'Approved source',
+                'permalink'      => 'https://example.com/approved',
+                'edit_url'       => 'https://example.com/wp-admin/post.php?post=10&action=edit',
+            ),
+            array(
+                'source_post_id' => 20,
+                'title'          => 'Second source',
+                'permalink'      => 'https://example.com/second',
+                'edit_url'       => 'https://example.com/wp-admin/post.php?post=20&action=edit',
+            ),
+        );
+        $suggestions = array(
+            array( 'source_post_id' => 999, 'anchor_text' => 'Invented', 'placement_hint' => 'Anywhere', 'reason' => 'Unknown ID' ),
+            array( 'source_post_id' => 10, 'anchor_text' => '<b>Useful anchor</b>', 'placement_hint' => 'After the introduction', 'reason' => 'Relevant context' ),
+            array( 'source_post_id' => 10, 'anchor_text' => 'Duplicate', 'placement_hint' => 'Footer', 'reason' => 'Duplicate ID' ),
+            array( 'source_post_id' => 20, 'anchor_text' => '', 'placement_hint' => 'Body', 'reason' => 'Missing anchor' ),
+        );
+
+        $normalized = LHA_AI_Internal::normalize_suggestions( $suggestions, $candidates );
+
+        lha_assert_same( 1, count( $normalized ) );
+        lha_assert_same( 10, $normalized[0]['source_post_id'] );
+        lha_assert_same( 'Useful anchor', $normalized[0]['anchor_text'] );
+        lha_assert_same( 'https://example.com/approved', $normalized[0]['source_url'] );
+    }
+);
+
+lha_test(
+    'uses one stable state contract for every AI background job result',
+    static function(): void {
+        $state = LHA_AI_Jobs::make_state( 'job-1', 'queued', 42 );
+
+        lha_assert_same(
+            array( 'job_id', 'status', 'target_post_id', 'suggestions', 'model', 'tokens', 'message', 'error', 'updated_at' ),
+            array_keys( $state )
+        );
+        lha_assert_same( 'job-1', $state['job_id'] );
+        lha_assert_same( 42, $state['target_post_id'] );
+        lha_assert_same( array(), $state['suggestions'] );
+    }
+);
+
+lha_test(
+    'preserves encrypted AI keys when settings password fields stay blank',
+    static function(): void {
+        $method = new ReflectionMethod( LHA_Settings::class, 'validate_and_sanitize' );
+        $method->setAccessible( true );
+        $saved = $method->invoke(
+            new LHA_Settings(),
+            array(
+                'ai_provider'      => 'openai',
+                'ai_key_openai'    => '',
+                'ai_key_claude'    => '',
+                'ai_model_openai'  => LHA_AI::OPENAI_DEFAULT_MODEL,
+                'ai_model_claude'  => LHA_AI::CLAUDE_DEFAULT_MODEL,
+            ),
+            array(
+                'ai_key_openai' => 'encrypted-openai',
+                'ai_key_claude' => 'encrypted-claude',
+            )
+        );
+
+        lha_assert_same( 'encrypted-openai', $saved['ai_key_openai'] );
+        lha_assert_same( 'encrypted-claude', $saved['ai_key_claude'] );
+        lha_assert_same( 'openai', $saved['ai_provider'] );
+    }
+);
+
+lha_test(
+    'wires orphan suggestions through background polling and structured provider output',
+    static function(): void {
+        $main     = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
+        $admin    = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
+        $jobs     = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php' );
+        $ai       = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai.php' );
+        $client   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/assets/js/ai-admin.js' );
+
+        lha_assert_same( true, is_string( $main ) && str_contains( $main, 'class-lha-ai-jobs.php' ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'wp_ajax_lha_ai_orphan_trigger' ) );
+        lha_assert_same( true, is_string( $jobs ) && str_contains( $jobs, 'wp_schedule_single_event' ) );
+        lha_assert_same( true, is_string( $jobs ) && str_contains( $jobs, 'wp_set_current_user( $user_id )' ) );
+        lha_assert_same( true, is_string( $ai ) && str_contains( $ai, '/v1/responses' ) );
+        lha_assert_same( true, is_string( $ai ) && str_contains( $ai, "'output_config'" ) );
+        lha_assert_same( true, is_string( $client ) && str_contains( $client, "request('lha_ai_orphan_status'" ) );
+        lha_assert_same( true, is_string( $client ) && ! str_contains( $client, 'setInterval(' ) );
     }
 );
 

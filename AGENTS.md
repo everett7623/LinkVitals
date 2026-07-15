@@ -19,6 +19,8 @@ root is a development and packaging workspace.
 - `linkvitals/assets/js/admin.js` - admin-only JavaScript.
 - `linkvitals/assets/js/image-repair.js` - bounded row and bulk interactions
   for missing WordPress image-size repairs.
+- `linkvitals/assets/js/ai-admin.js` - AI connection tests and recursive
+  polling/rendering for background orphan-page suggestions.
 - `linkvitals/languages/` - translation template and Chinese
   translation files.
 - `tests/run.php` - dependency-free PHP contract tests for core static behavior.
@@ -91,7 +93,8 @@ The MVP and phase-two feature set is implemented in source:
 - settings form, logger, CSV export, repair actions, redirect replacement,
   repair history with guarded rollback, anchor checker, internal link analyzer,
   SEO checker, email notifications
-- optional `LHA_AI` helper for OpenAI or Anthropic replacement suggestions
+- optional OpenAI or Anthropic suggestions for broken links and orphaned pages,
+  with encrypted settings and provider-neutral background jobs
 - maintenance AJAX tools for orphan cleanup, log purge, and data reset
 
 Recent cleanup already performed:
@@ -148,12 +151,18 @@ Recent cleanup already performed:
   with one-click repair and sequential selected-row AJAX processing
 - made every dashboard statistic card a keyboard-accessible entry point to the
   matching Links Report filter
+- added suggestion-only AI guidance for orphaned pages, using server-ranked
+  candidate IDs, structured provider output, and source-page edit links
+- moved AI provider calls into deduplicated WP-Cron jobs with stable polling
+  state and updated the default OpenAI/Claude model contracts
 
 Known gaps:
 
 - automated coverage is limited to dependency-free database and extractor
   contracts in `tests/run.php`; no WordPress integration test environment or
   CI is wired up
+- AI response envelopes and whitelist validation have contract coverage, but
+  live provider calls still require staging verification with real credentials
 - old optional property-test tasks were never implemented
 - release zips may not include the latest source edits until explicitly rebuilt
 - use `python tools/package-release.py` for the upload zip; do not zip the
@@ -185,6 +194,12 @@ The scanning pipeline is orchestrated by `LHA_Scanner`:
    to settings.
 9. When queue and pending links are exhausted, scan status becomes `completed`.
 
+The orphan-page AI workflow is separate from scanning. The admin queues one
+`lha_process_ai_orphan_job` single event, polls a transient-backed stable state,
+and displays at most three suggestions. `LHA_AI_Internal` queries a bounded
+candidate pool once, sends at most ten title/excerpt contexts, and discards any
+model IDs outside the server-owned candidate map. It never writes post content.
+
 ## Core Classes
 
 - `LHA_DB` - table names, table creation, URL normalization, link CRUD,
@@ -211,6 +226,10 @@ The scanning pipeline is orchestrated by `LHA_Scanner`:
 - `LHA_Anchor_Checker` - fragment id/name validation.
 - `LHA_SEO_Checker` - nofollow, sponsored, noopener/noreferrer, HTTP checks.
 - `LHA_AI` - optional server-side AI suggestions.
+- `LHA_AI_Internal` - bounded candidate ranking, prompt context, and strict
+  server-side validation for orphaned-page suggestions.
+- `LHA_AI_Jobs` - transient-backed queue, deduplication, WP-Cron processing,
+  stable status polling, and result retention for AI suggestions.
 
 ## Data Model
 
@@ -268,6 +287,9 @@ Default keys include:
 - `repair_history_retention_days` (`0` keeps rolled-back repair history
   forever; positive values purge old rolled-back repair records only)
 - proxy settings: `proxy_enabled`, `proxy_host`, `proxy_port`, `proxy_type`
+- `ai_provider` (`openai`, `claude`, or empty to disable)
+- encrypted credentials: `ai_key_openai`, `ai_key_claude`
+- editable models: `ai_model_openai`, `ai_model_claude`
 - `language` (`auto`, `en_US`, `zh_CN`)
 - `language_manually_selected` (internal marker; legacy settings without this
   marker are migrated back to `auto`)
@@ -313,6 +335,8 @@ Current actions include:
 - `lha_get_replace_preview`
 - `lha_ai_analyze`
 - `lha_ai_test`
+- `lha_ai_orphan_trigger`
+- `lha_ai_orphan_status`
 - `lha_cleanup_orphans`
 - `lha_purge_logs`
 - `lha_purge_repairs`
@@ -392,4 +416,6 @@ Good next tasks:
 - `.sync-conflict-*` files in `assets/` are Syncthing artifacts and should not
   be treated as source.
 - `LHA_AI` is optional and should fail gracefully when no provider key is set.
+- AI orphan suggestions depend on WP-Cron. They are suggestion-only, must use
+  bounded context, and model IDs must be validated against server candidates.
 - PHP may not be installed on the local PATH in this workspace.

@@ -279,3 +279,63 @@
 tr[style*="background: rgb(237, 250, 239)"] td {
     transition: background 0.3s ease;
 }
+
+.lha-ai-orphan-trigger,
+#lha-internal td > a + a {
+    margin-left: 8px;
+}
+
+.lha-ai-suggestions-row > td {
+    background: #f6f7f7;
+    padding: 14px 18px;
+}
+
+.lha-ai-suggestions .spinner {
+    float: none;
+    margin: 0 8px 0 0;
+}
+
+.lha-ai-result-message {
+    margin-top: 0;
+}
+
+.lha-ai-suggestion-list {
+    display: grid;
+    gap: 12px;
+    margin: 12px 0 0 20px;
+}
+
+.lha-ai-suggestion-item {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-left: 4px solid #2271b1;
+    padding: 12px 14px;
+}
+
+.lha-ai-suggestion-item p {
+    margin: 0 0 8px;
+}
+
+.lha-ai-test-status {
+    display: inline-block;
+    margin-left: 8px;
+}
+
+.lha-ai-test-ok {
+    color: #008a20;
+}
+
+.lha-ai-test-error {
+    color: #b32d2e;
+}
+
+.lha-ai-privacy-notice {
+    background: #f0f6fc;
+    border-left: 4px solid #72aee6;
+    padding: 10px 12px;
+}
+
+.lha-ai-error.notice {
+    margin: 0;
+    padding: 8px 12px;
+}

@@ -2,7 +2,7 @@
 # This file is distributed under the same license as the LinkVitals package.
 msgid ""
 msgstr ""
-"Project-Id-Version: LinkVitals 0.3.4\n"
+"Project-Id-Version: LinkVitals 0.3.5\n"
 "POT-Creation-Date: 2026-07-15 00:00+0000\n"
 "PO-Revision-Date: 2026-07-15 00:00+0000\n"
 "Language: zh_CN\n"
@@ -911,3 +911,140 @@ msgstr "此链接不是可自动修复的站内 404 图片尺寸。"
 
 msgid "Stale image record removed."
 msgstr "已移除过期图片记录。"
+
+# Source strings synced by tools/i18n-sync.py
+
+msgid "A key is stored. Leave this field blank to keep it."
+msgstr "已保存密钥。留空即可保留原密钥。"
+
+msgid "AI Internal Link Suggestions"
+msgstr "AI 内链建议"
+
+msgid "AI Provider"
+msgstr "AI 服务商"
+
+msgid "AI returned an invalid suggestions format."
+msgstr "AI 返回的建议格式无效。"
+
+msgid "AI suggestion failed."
+msgstr "AI 建议生成失败。"
+
+msgid "AI suggestion job expired or was not found."
+msgstr "AI 建议任务已过期或不存在。"
+
+msgid "AI suggestion job queued."
+msgstr "AI 建议任务已加入队列。"
+
+msgid "AI suggestions are optional and never modify post content automatically."
+msgstr "AI 建议为可选功能，绝不会自动修改文章内容。"
+
+msgid "AI suggestions did not match the approved candidate pages."
+msgstr "AI 建议与服务端批准的候选页面不匹配。"
+
+msgid "Anchor text"
+msgstr "锚文本"
+
+msgid "Claude API Key"
+msgstr "Claude API 密钥"
+
+msgid "Claude Model"
+msgstr "Claude 模型"
+
+msgid "Claude refused to generate this suggestion."
+msgstr "Claude 拒绝生成此建议。"
+
+msgid "Claude response was truncated. Try a smaller context."
+msgstr "Claude 响应被截断，请尝试缩小上下文。"
+
+msgid "Claude returned an empty response."
+msgstr "Claude 返回了空响应。"
+
+msgid "Configure AI"
+msgstr "配置 AI"
+
+msgid "Could not schedule the AI suggestion job."
+msgstr "无法调度 AI 建议任务。"
+
+msgid "Disabled"
+msgstr "已禁用"
+
+msgid "Edit source page"
+msgstr "编辑来源页面"
+
+msgid "Enter a key, test it, then save settings."
+msgstr "请输入密钥，测试连接后保存设置。"
+
+msgid "Generate again"
+msgstr "重新生成"
+
+msgid "Generate AI Suggestions"
+msgstr "生成 AI 建议"
+
+msgid "Generated %d internal link suggestion(s)."
+msgstr "已生成 %d 条内链建议。"
+
+msgid "Generating internal link suggestions..."
+msgstr "正在生成内链建议……"
+
+msgid "Generating suggestions..."
+msgstr "正在生成建议……"
+
+msgid "Invalid AI job ID."
+msgstr "AI 任务 ID 无效。"
+
+msgid "Invalid post ID."
+msgstr "文章 ID 无效。"
+
+msgid "Loading saved AI job..."
+msgstr "正在加载已保存的 AI 任务……"
+
+msgid "No suitable source pages were found."
+msgstr "未找到合适的来源页面。"
+
+msgid "OpenAI API Key"
+msgstr "OpenAI API 密钥"
+
+msgid "OpenAI Model"
+msgstr "OpenAI 模型"
+
+msgid "OpenAI refused to generate this suggestion."
+msgstr "OpenAI 拒绝生成此建议。"
+
+msgid "OpenAI response was not completed: %s"
+msgstr "OpenAI 响应未完成：%s"
+
+msgid "OpenAI returned an empty response."
+msgstr "OpenAI 返回了空响应。"
+
+msgid "Placement"
+msgstr "插入位置"
+
+msgid "Privacy: LinkVitals sends the target title and excerpt plus up to 10 candidate titles and excerpts to the selected provider. It does not send the full site or expose API keys to the browser."
+msgstr "隐私说明：LinkVitals 仅向所选服务商发送目标页面的标题和摘要，以及最多 10 个候选页面的标题和摘要；不会发送整站内容，也不会向浏览器暴露 API 密钥。"
+
+msgid "Suggested source page"
+msgstr "建议来源页面"
+
+msgid "Test Connection"
+msgstr "测试连接"
+
+msgid "Testing..."
+msgstr "正在测试……"
+
+msgid "The AI suggestion job failed unexpectedly."
+msgstr "AI 建议任务意外失败。"
+
+msgid "The job is taking longer than expected. Reload this page to continue checking."
+msgstr "任务耗时超出预期，请刷新页面继续检查。"
+
+msgid "The selected provider is used when generating orphaned-page suggestions."
+msgstr "生成孤立页面建议时将使用所选 AI 服务商。"
+
+msgid "The target page is not a published public post."
+msgstr "目标页面不是已发布的公开文章。"
+
+msgid "Waiting for the background job..."
+msgstr "正在等待后台任务……"
+
+msgid "Why"
+msgstr "推荐理由"

@@ -93,6 +93,11 @@ class LHA_Activator {
             'notification_email'     => get_option( 'admin_email' ),
             'delete_data_on_uninstall' => 0,
             'repair_history_retention_days' => 180,
+            'ai_provider'             => '',
+            'ai_key_openai'           => '',
+            'ai_key_claude'           => '',
+            'ai_model_openai'         => LHA_AI::OPENAI_DEFAULT_MODEL,
+            'ai_model_claude'         => LHA_AI::CLAUDE_DEFAULT_MODEL,
             'language'               => 'auto',
             'language_manually_selected' => 0,
         );

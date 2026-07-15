@@ -33,6 +33,8 @@ class LHA_Admin {
         add_action( 'wp_ajax_lha_get_replace_preview', array( $this, 'ajax_get_replace_preview' ) );
         add_action( 'wp_ajax_lha_ai_analyze', array( $this, 'ajax_ai_analyze' ) );
         add_action( 'wp_ajax_lha_ai_test', array( $this, 'ajax_ai_test' ) );
+        add_action( 'wp_ajax_lha_ai_orphan_trigger', array( $this, 'ajax_ai_orphan_trigger' ) );
+        add_action( 'wp_ajax_lha_ai_orphan_status', array( $this, 'ajax_ai_orphan_status' ) );
         add_action( 'wp_ajax_lha_cleanup_orphans', array( $this, 'ajax_cleanup_orphans' ) );
         add_action( 'wp_ajax_lha_purge_logs', array( $this, 'ajax_purge_logs' ) );
         add_action( 'wp_ajax_lha_purge_repairs', array( $this, 'ajax_purge_repairs' ) );
@@ -128,6 +130,14 @@ class LHA_Admin {
             true
         );
 
+        wp_enqueue_script(
+            'lha-ai-admin-js',
+            LHA_PLUGIN_URL . 'assets/js/ai-admin.js',
+            array( 'jquery', 'lha-admin-js' ),
+            LHA_VERSION,
+            true
+        );
+
         wp_localize_script( 'lha-admin-js', 'lhaAdmin', array(
             'ajaxUrl' => admin_url( 'admin-ajax.php' ),
             'nonce'   => wp_create_nonce( 'lha_ajax_nonce' ),
@@ -166,6 +176,17 @@ class LHA_Admin {
                 'image_repair_no_selection' => __( 'Select at least one link to repair.', 'linkvitals' ),
                 'image_repair_progress' => __( 'Repairing image %1$d of %2$d...', 'linkvitals' ),
                 'image_repair_complete' => __( 'Image repair complete: %1$d repaired, %2$d failed.', 'linkvitals' ),
+                'ai_testing' => __( 'Testing...', 'linkvitals' ),
+                'ai_generating' => __( 'Generating suggestions...', 'linkvitals' ),
+                'ai_waiting' => __( 'Waiting for the background job...', 'linkvitals' ),
+                'ai_failed' => __( 'AI suggestion failed.', 'linkvitals' ),
+                'ai_poll_timeout' => __( 'The job is taking longer than expected. Reload this page to continue checking.', 'linkvitals' ),
+                'ai_source_page' => __( 'Suggested source page', 'linkvitals' ),
+                'ai_anchor_text' => __( 'Anchor text', 'linkvitals' ),
+                'ai_placement' => __( 'Placement', 'linkvitals' ),
+                'ai_reason' => __( 'Why', 'linkvitals' ),
+                'ai_edit_source' => __( 'Edit source page', 'linkvitals' ),
+                'ai_generate_again' => __( 'Generate again', 'linkvitals' ),
             ),
         ) );
     }
@@ -627,7 +648,20 @@ class LHA_Admin {
             'filter'   => $filter,
         ) );
 
-        $base_url = admin_url( 'tools.php?page=lha-dashboard&tab=internal' );
+        $base_url     = admin_url( 'tools.php?page=lha-dashboard&tab=internal' );
+        $orphan_ids   = array_map(
+            'absint',
+            array_column(
+                array_filter(
+                    $results['items'],
+                    static fn( array $item ): bool => ! empty( $item['is_orphaned'] )
+                ),
+                'post_id'
+            )
+        );
+        $indexed_jobs = LHA_AI_Jobs::get_indexed_jobs( $orphan_ids, get_current_user_id() );
+        $ai_available = LHA_AI::is_available();
+        $settings_url = admin_url( 'tools.php?page=lha-dashboard&tab=settings' );
 
         ?>
         <div id="lha-internal">
@@ -679,14 +713,43 @@ class LHA_Admin {
                         <tr><td colspan="6"><?php esc_html_e( 'No data available. Run a scan first.', 'linkvitals' ); ?></td></tr>
                     <?php else : ?>
                         <?php foreach ( $results['items'] as $item ) : ?>
-                        <tr>
+                        <?php $job_id = $indexed_jobs[ (int) $item['post_id'] ] ?? ''; ?>
+                        <tr class="lha-internal-post-row">
                             <td><a href="<?php echo esc_url( $item['permalink'] ); ?>"><?php echo esc_html( $item['title'] ); ?></a></td>
                             <td><?php echo esc_html( $item['post_type'] ); ?></td>
                             <td><?php echo esc_html( $item['inbound'] ); ?></td>
                             <td><?php echo esc_html( $item['outbound'] ); ?></td>
                             <td><?php echo $item['is_orphaned'] ? '<span class="lha-badge lha-badge-danger">' . esc_html__( 'Orphaned', 'linkvitals' ) . '</span>' : '<span class="lha-badge lha-badge-ok">' . esc_html__( 'OK', 'linkvitals' ) . '</span>'; ?></td>
-                            <td><a href="<?php echo esc_url( $item['edit_url'] ); ?>"><?php esc_html_e( 'Edit', 'linkvitals' ); ?></a></td>
+                            <td>
+                                <a href="<?php echo esc_url( $item['edit_url'] ); ?>"><?php esc_html_e( 'Edit', 'linkvitals' ); ?></a>
+                                <?php if ( $item['is_orphaned'] && $ai_available ) : ?>
+                                    <button
+                                        type="button"
+                                        class="button button-small lha-ai-orphan-trigger"
+                                        data-post-id="<?php echo esc_attr( $item['post_id'] ); ?>"
+                                        data-job-id="<?php echo esc_attr( $job_id ); ?>"
+                                        aria-controls="lha-ai-suggestions-<?php echo esc_attr( $item['post_id'] ); ?>"
+                                    ><?php esc_html_e( 'Generate AI Suggestions', 'linkvitals' ); ?></button>
+                                <?php elseif ( $item['is_orphaned'] ) : ?>
+                                    <a href="<?php echo esc_url( $settings_url ); ?>"><?php esc_html_e( 'Configure AI', 'linkvitals' ); ?></a>
+                                <?php endif; ?>
+                            </td>
                         </tr>
+                        <?php if ( $item['is_orphaned'] && $ai_available ) : ?>
+                            <tr
+                                id="lha-ai-suggestions-<?php echo esc_attr( $item['post_id'] ); ?>"
+                                class="lha-ai-suggestions-row"
+                                <?php echo '' === $job_id ? 'hidden' : ''; ?>
+                            >
+                                <td colspan="6">
+                                    <div class="lha-ai-suggestions" aria-live="polite">
+                                        <?php if ( '' !== $job_id ) : ?>
+                                            <span class="spinner is-active"></span><?php esc_html_e( 'Loading saved AI job...', 'linkvitals' ); ?>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endif; ?>
                         <?php endforeach; ?>
                     <?php endif; ?>
                 </tbody>
@@ -1278,6 +1341,7 @@ class LHA_Admin {
 
         // Temporarily use the key sent from the form (not yet saved)
         $raw_key = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
+        $model   = isset( $_POST['model'] ) ? sanitize_text_field( wp_unslash( $_POST['model'] ) ) : '';
         if ( ! empty( $raw_key ) ) {
             // Temporarily override the stored key for this test
             add_filter( 'lha_api_key_override', function() use ( $raw_key ) {
@@ -1286,12 +1350,51 @@ class LHA_Admin {
         }
 
         $ai     = new LHA_AI();
-        $result = $ai->test_connection( $provider );
+        $result = $ai->test_connection( $provider, $model );
 
-        wp_send_json( array(
-            'success' => $result['success'],
-            'data'    => array( 'message' => $result['message'] ),
-        ) );
+        if ( $result['success'] ) {
+            wp_send_json_success( array( 'message' => $result['message'] ) );
+        }
+
+        wp_send_json_error( array( 'message' => $result['message'] ) );
+    }
+
+    /** AJAX: Queue AI suggestions for one orphaned page. */
+    public function ajax_ai_orphan_trigger(): void {
+        LHA_Security::ajax_check();
+
+        $post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+        if ( ! $post_id ) {
+            wp_send_json_error( LHA_AI_Jobs::make_state( '', 'failed', 0, array( 'error' => __( 'Invalid post ID.', 'linkvitals' ) ) ) );
+            return;
+        }
+
+        $state = LHA_AI_Jobs::trigger( $post_id, get_current_user_id() );
+        if ( 'failed' === $state['status'] ) {
+            wp_send_json_error( $state );
+            return;
+        }
+
+        wp_send_json_success( $state );
+    }
+
+    /** AJAX: Poll an AI suggestion job. */
+    public function ajax_ai_orphan_status(): void {
+        LHA_Security::ajax_check();
+
+        $job_id = isset( $_POST['job_id'] ) ? sanitize_key( wp_unslash( $_POST['job_id'] ) ) : '';
+        if ( '' === $job_id ) {
+            wp_send_json_error( LHA_AI_Jobs::make_state( '', 'failed', 0, array( 'error' => __( 'Invalid AI job ID.', 'linkvitals' ) ) ) );
+            return;
+        }
+
+        $state = LHA_AI_Jobs::get_status( $job_id );
+        if ( 'failed' === $state['status'] ) {
+            wp_send_json_error( $state );
+            return;
+        }
+
+        wp_send_json_success( $state );
     }
 
     /**

@@ -2,7 +2,7 @@
 # This file is distributed under the same license as the LinkVitals package.
 msgid ""
 msgstr ""
-"Project-Id-Version: LinkVitals 0.3.4\n"
+"Project-Id-Version: LinkVitals 0.3.5\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/linkvitals\n"
 "POT-Creation-Date: 2026-07-15 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -1255,4 +1255,191 @@ msgstr ""
 
 #: includes/class-lha-image-repair.php:123
 msgid "Stale image record removed."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-settings.php:442
+#: includes/class-lha-settings.php:463
+msgid "A key is stored. Leave this field blank to keep it."
+msgstr ""
+
+#: includes/class-lha-settings.php:409
+msgid "AI Internal Link Suggestions"
+msgstr ""
+
+#: includes/class-lha-settings.php:414
+msgid "AI Provider"
+msgstr ""
+
+#: includes/class-lha-ai.php:205
+msgid "AI returned an invalid suggestions format."
+msgstr ""
+
+#: includes/class-lha-admin.php:182
+msgid "AI suggestion failed."
+msgstr ""
+
+#: includes/class-lha-ai-jobs.php:168
+msgid "AI suggestion job expired or was not found."
+msgstr ""
+
+#: includes/class-lha-ai-jobs.php:64
+msgid "AI suggestion job queued."
+msgstr ""
+
+#: includes/class-lha-settings.php:410
+msgid "AI suggestions are optional and never modify post content automatically."
+msgstr ""
+
+#: includes/class-lha-ai-internal.php:71
+msgid "AI suggestions did not match the approved candidate pages."
+msgstr ""
+
+#: includes/class-lha-admin.php:185
+msgid "Anchor text"
+msgstr ""
+
+#: includes/class-lha-settings.php:456
+msgid "Claude API Key"
+msgstr ""
+
+#: includes/class-lha-settings.php:448
+msgid "Claude Model"
+msgstr ""
+
+#: includes/class-lha-ai.php:561
+msgid "Claude refused to generate this suggestion."
+msgstr ""
+
+#: includes/class-lha-ai.php:562
+msgid "Claude response was truncated. Try a smaller context."
+msgstr ""
+
+#: includes/class-lha-ai.php:574
+msgid "Claude returned an empty response."
+msgstr ""
+
+#: includes/class-lha-admin.php:734
+msgid "Configure AI"
+msgstr ""
+
+#: includes/class-lha-ai-jobs.php:88
+msgid "Could not schedule the AI suggestion job."
+msgstr ""
+
+#: includes/class-lha-settings.php:418
+msgid "Disabled"
+msgstr ""
+
+#: includes/class-lha-admin.php:188
+msgid "Edit source page"
+msgstr ""
+
+#: includes/class-lha-settings.php:442
+#: includes/class-lha-settings.php:463
+msgid "Enter a key, test it, then save settings."
+msgstr ""
+
+#: includes/class-lha-admin.php:189
+msgid "Generate again"
+msgstr ""
+
+#: includes/class-lha-admin.php:732
+msgid "Generate AI Suggestions"
+msgstr ""
+
+#: includes/class-lha-ai-jobs.php:124
+msgid "Generated %d internal link suggestion(s)."
+msgstr ""
+
+#: includes/class-lha-ai-jobs.php:104
+msgid "Generating internal link suggestions..."
+msgstr ""
+
+#: includes/class-lha-admin.php:180
+msgid "Generating suggestions..."
+msgstr ""
+
+#: includes/class-lha-admin.php:1387
+msgid "Invalid AI job ID."
+msgstr ""
+
+#: includes/class-lha-admin.php:1368
+msgid "Invalid post ID."
+msgstr ""
+
+#: includes/class-lha-admin.php:747
+msgid "Loading saved AI job..."
+msgstr ""
+
+#: includes/class-lha-ai-jobs.php:121
+msgid "No suitable source pages were found."
+msgstr ""
+
+#: includes/class-lha-settings.php:435
+msgid "OpenAI API Key"
+msgstr ""
+
+#: includes/class-lha-settings.php:427
+msgid "OpenAI Model"
+msgstr ""
+
+#: includes/class-lha-ai.php:518
+msgid "OpenAI refused to generate this suggestion."
+msgstr ""
+
+#: includes/class-lha-ai.php:505
+msgid "OpenAI response was not completed: %s"
+msgstr ""
+
+#: includes/class-lha-ai.php:527
+msgid "OpenAI returned an empty response."
+msgstr ""
+
+#: includes/class-lha-admin.php:186
+msgid "Placement"
+msgstr ""
+
+#: includes/class-lha-settings.php:469
+msgid "Privacy: LinkVitals sends the target title and excerpt plus up to 10 candidate titles and excerpts to the selected provider. It does not send the full site or expose API keys to the browser."
+msgstr ""
+
+#: includes/class-lha-admin.php:184
+msgid "Suggested source page"
+msgstr ""
+
+#: includes/class-lha-settings.php:439
+#: includes/class-lha-settings.php:460
+msgid "Test Connection"
+msgstr ""
+
+#: includes/class-lha-admin.php:179
+msgid "Testing..."
+msgstr ""
+
+#: includes/class-lha-ai-jobs.php:147
+msgid "The AI suggestion job failed unexpectedly."
+msgstr ""
+
+#: includes/class-lha-admin.php:183
+msgid "The job is taking longer than expected. Reload this page to continue checking."
+msgstr ""
+
+#: includes/class-lha-settings.php:422
+msgid "The selected provider is used when generating orphaned-page suggestions."
+msgstr ""
+
+#: includes/class-lha-ai-internal.php:28
+#: includes/class-lha-ai-internal.php:33
+#: includes/class-lha-ai-jobs.php:45
+msgid "The target page is not a published public post."
+msgstr ""
+
+#: includes/class-lha-admin.php:181
+msgid "Waiting for the background job..."
+msgstr ""
+
+#: includes/class-lha-admin.php:187
+msgid "Why"
 msgstr ""

@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.4
+Stable tag: 0.3.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -29,7 +29,8 @@ LinkVitals helps WordPress site owners maintain healthy links across their entir
 * WP-Cron scheduled automatic scans
 * Verified one-click and selected-row repairs for missing WordPress image sizes
 * Clickable dashboard statistics that open the matching report filter
-* No external service dependencies
+* Optional AI suggestions for orphaned pages with source-page edit links
+* No required external service dependencies
 * WordPress native admin UI
 
 **What it scans:**
@@ -82,6 +83,13 @@ Yes, with configurable rate limiting to avoid hammering external servers. You ca
 
 Only if you enable "Delete all plugin data when plugin is uninstalled" in settings. By default, data is preserved.
 
+= Does AI modify my posts automatically? =
+
+No. AI suggestions are optional and only recommend an existing source page,
+anchor text, placement, and reason. LinkVitals never writes those suggestions
+into post content. It sends only the target title and excerpt plus up to 10
+bounded candidate titles and excerpts to the provider you configure.
+
 = How do I upgrade from a 0.2.x development build? =
 
 The plugin folder and main file changed for the LinkVitals rebrand. Deactivate
@@ -90,6 +98,12 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.5 =
+* Added opt-in AI internal-link suggestions for orphaned pages with source-page edit shortcuts
+* Runs provider calls as deduplicated WP-Cron jobs with resumable admin polling instead of blocking requests
+* Limits model context to server-selected candidates and rejects invented or duplicate post IDs before display
+* Added encrypted OpenAI and Anthropic settings, connection tests, structured output, and current default models
 
 = 0.3.4 =
 * Made every dashboard statistic card an accessible entry point to its matching Links Report filter
@@ -208,6 +222,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.5 =
+Adds optional, suggestion-only AI guidance for fixing orphaned pages. Configure a provider and API key under LinkVitals Settings to enable it.
 
 = 0.3.4 =
 Makes dashboard statistics directly actionable by opening the corresponding filtered link report.

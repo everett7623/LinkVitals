@@ -97,7 +97,7 @@ class LHA_Settings {
             ? wp_unslash( $_POST['lha_settings'] )
             : array();
 
-        $sanitized = $this->validate_and_sanitize( $input );
+        $sanitized = $this->validate_and_sanitize( $input, $old_settings );
 
         update_option( $this->option_name, $sanitized );
 
@@ -130,9 +130,10 @@ class LHA_Settings {
      * Values outside ranges are clamped to the nearest boundary (Req 20.6).
      *
      * @param array $input Raw input array from the form.
+     * @param array $old_settings Existing settings used to preserve blank API key fields.
      * @return array Sanitized and validated settings array.
      */
-    private function validate_and_sanitize( array $input ): array {
+    private function validate_and_sanitize( array $input, array $old_settings = array() ): array {
         $sanitized = array();
 
         // --- Scanning section ---
@@ -176,6 +177,25 @@ class LHA_Settings {
         $sanitized['notification_email']     = isset( $input['notification_email'] )
             ? sanitize_email( $input['notification_email'] )
             : '';
+
+        // --- AI section ---
+        $sanitized['ai_provider'] = in_array( $input['ai_provider'] ?? '', array( 'openai', 'claude' ), true )
+            ? sanitize_key( $input['ai_provider'] )
+            : '';
+        $sanitized['ai_model_openai'] = isset( $input['ai_model_openai'] ) && '' !== trim( (string) $input['ai_model_openai'] )
+            ? sanitize_text_field( (string) $input['ai_model_openai'] )
+            : LHA_AI::OPENAI_DEFAULT_MODEL;
+        $sanitized['ai_model_claude'] = isset( $input['ai_model_claude'] ) && '' !== trim( (string) $input['ai_model_claude'] )
+            ? sanitize_text_field( (string) $input['ai_model_claude'] )
+            : LHA_AI::CLAUDE_DEFAULT_MODEL;
+
+        foreach ( array( 'openai', 'claude' ) as $provider ) {
+            $field       = 'ai_key_' . $provider;
+            $submitted   = isset( $input[ $field ] ) ? sanitize_text_field( (string) $input[ $field ] ) : '';
+            $stored_key  = (string) ( $old_settings[ $field ] ?? '' );
+            $encrypted   = '' !== $submitted ? LHA_AI::encrypt( $submitted ) : '';
+            $sanitized[ $field ] = '' !== $encrypted ? $encrypted : $stored_key;
+        }
 
         // --- Data section ---
         $sanitized['delete_data_on_uninstall'] = ! empty( $input['delete_data_on_uninstall'] ) ? 1 : 0;
@@ -384,6 +404,70 @@ class LHA_Settings {
                         </td>
                     </tr>
                 </table>
+
+                <!-- AI Suggestions Section -->
+                <h2><?php esc_html_e( 'AI Internal Link Suggestions', 'linkvitals' ); ?></h2>
+                <p><?php esc_html_e( 'AI suggestions are optional and never modify post content automatically.', 'linkvitals' ); ?></p>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row">
+                            <label for="lha-ai-provider"><?php esc_html_e( 'AI Provider', 'linkvitals' ); ?></label>
+                        </th>
+                        <td>
+                            <select name="lha_settings[ai_provider]" id="lha-ai-provider">
+                                <option value="" <?php selected( $settings['ai_provider'] ?? '', '' ); ?>><?php esc_html_e( 'Disabled', 'linkvitals' ); ?></option>
+                                <option value="openai" <?php selected( $settings['ai_provider'] ?? '', 'openai' ); ?>>OpenAI</option>
+                                <option value="claude" <?php selected( $settings['ai_provider'] ?? '', 'claude' ); ?>>Anthropic Claude</option>
+                            </select>
+                            <p class="description"><?php esc_html_e( 'The selected provider is used when generating orphaned-page suggestions.', 'linkvitals' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="lha-ai-model-openai"><?php esc_html_e( 'OpenAI Model', 'linkvitals' ); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" name="lha_settings[ai_model_openai]" id="lha-ai-model-openai" value="<?php echo esc_attr( $settings['ai_model_openai'] ?? LHA_AI::OPENAI_DEFAULT_MODEL ); ?>" class="regular-text" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="lha-ai-key-openai"><?php esc_html_e( 'OpenAI API Key', 'linkvitals' ); ?></label>
+                        </th>
+                        <td>
+                            <input type="password" name="lha_settings[ai_key_openai]" id="lha-ai-key-openai" value="" class="regular-text" autocomplete="new-password" />
+                            <button type="button" class="button lha-ai-test" data-provider="openai" data-key-input="#lha-ai-key-openai" data-model-input="#lha-ai-model-openai"><?php esc_html_e( 'Test Connection', 'linkvitals' ); ?></button>
+                            <span class="lha-ai-test-status" data-provider="openai" aria-live="polite"></span>
+                            <p class="description">
+                                <?php echo LHA_AI::has_stored_key( 'openai' ) ? esc_html__( 'A key is stored. Leave this field blank to keep it.', 'linkvitals' ) : esc_html__( 'Enter a key, test it, then save settings.', 'linkvitals' ); ?>
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="lha-ai-model-claude"><?php esc_html_e( 'Claude Model', 'linkvitals' ); ?></label>
+                        </th>
+                        <td>
+                            <input type="text" name="lha_settings[ai_model_claude]" id="lha-ai-model-claude" value="<?php echo esc_attr( $settings['ai_model_claude'] ?? LHA_AI::CLAUDE_DEFAULT_MODEL ); ?>" class="regular-text" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">
+                            <label for="lha-ai-key-claude"><?php esc_html_e( 'Claude API Key', 'linkvitals' ); ?></label>
+                        </th>
+                        <td>
+                            <input type="password" name="lha_settings[ai_key_claude]" id="lha-ai-key-claude" value="" class="regular-text" autocomplete="new-password" />
+                            <button type="button" class="button lha-ai-test" data-provider="claude" data-key-input="#lha-ai-key-claude" data-model-input="#lha-ai-model-claude"><?php esc_html_e( 'Test Connection', 'linkvitals' ); ?></button>
+                            <span class="lha-ai-test-status" data-provider="claude" aria-live="polite"></span>
+                            <p class="description">
+                                <?php echo LHA_AI::has_stored_key( 'claude' ) ? esc_html__( 'A key is stored. Leave this field blank to keep it.', 'linkvitals' ) : esc_html__( 'Enter a key, test it, then save settings.', 'linkvitals' ); ?>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                <p class="description lha-ai-privacy-notice">
+                    <?php esc_html_e( 'Privacy: LinkVitals sends the target title and excerpt plus up to 10 candidate titles and excerpts to the selected provider. It does not send the full site or expose API keys to the browser.', 'linkvitals' ); ?>
+                </p>
 
                 <!-- Language Section -->
                 <h2><?php esc_html_e( 'Language', 'linkvitals' ); ?></h2>

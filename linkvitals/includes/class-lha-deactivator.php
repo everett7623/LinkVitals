@@ -24,6 +24,7 @@ class LHA_Deactivator {
         // Clear all scheduled cron events
         wp_clear_scheduled_hook( 'lha_process_queue' );
         wp_clear_scheduled_hook( 'lha_scheduled_scan' );
+        wp_clear_scheduled_hook( LHA_AI_Jobs::HOOK );
 
         // Stop any running scan by setting status to idle
         update_option( 'lha_scan_status', 'idle' );

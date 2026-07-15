@@ -3,7 +3,7 @@
  * Plugin Name: LinkVitals – Link Health & SEO Auditor
  * Plugin URI: https://github.com/everett7623/LinkVitals
  * Description: Comprehensive link health audit plugin for WordPress. Detects broken links, redirects, timeouts, SSL errors, orphaned pages, and SEO link risks across posts, pages, menus, and custom post types.
- * Version: 0.3.4
+ * Version: 0.3.5
  * Requires at least: 6.4
  * Requires PHP: 8.0
  * Author: everettlabs
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'LHA_VERSION', '0.3.4' );
+define( 'LHA_VERSION', '0.3.5' );
 define( 'LHA_PLUGIN_FILE', __FILE__ );
 define( 'LHA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LHA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -46,6 +46,8 @@ require_once LHA_PLUGIN_DIR . 'includes/class-lha-logger.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-anchor-checker.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-seo-checker.php';
 require_once LHA_PLUGIN_DIR . 'includes/class-lha-ai.php';
+require_once LHA_PLUGIN_DIR . 'includes/class-lha-ai-internal.php';
+require_once LHA_PLUGIN_DIR . 'includes/class-lha-ai-jobs.php';
 
 // Activation and deactivation hooks
 register_activation_hook( __FILE__, array( 'LHA_Activator', 'activate' ) );
@@ -84,6 +86,7 @@ final class LinkVitals_Plugin {
 
         // Initialize cron
         new LHA_Cron();
+        LHA_AI_Jobs::register();
     }
 
     /**
