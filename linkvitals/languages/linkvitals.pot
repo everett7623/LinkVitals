@@ -2,7 +2,7 @@
 # This file is distributed under the same license as the LinkVitals package.
 msgid ""
 msgstr ""
-"Project-Id-Version: LinkVitals 0.3.2\n"
+"Project-Id-Version: LinkVitals 0.3.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/linkvitals\n"
 "POT-Creation-Date: 2026-07-15 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -1199,4 +1199,60 @@ msgstr ""
 
 #: includes/class-lha-repair.php:108
 msgid "You do not have permission to edit post #%d."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-admin.php:164
+msgid "Checking original image..."
+msgstr ""
+
+#: includes/class-lha-list-table.php:280
+msgid "Find & Use Original"
+msgstr ""
+
+#: includes/class-lha-admin.php:168
+msgid "Image repair complete: %1$d repaired, %2$d failed."
+msgstr ""
+
+#: includes/class-lha-admin.php:165
+msgid "Image repair failed"
+msgstr ""
+
+#: includes/class-lha-image-repair.php:96
+msgid "No verified original image was found."
+msgstr ""
+
+#: includes/class-lha-list-table.php:79
+msgid "Repair Missing Image Sizes"
+msgstr ""
+
+#: includes/class-lha-image-repair.php:122
+msgid "Repaired %1$d occurrence(s) with verified image: %2$s"
+msgstr ""
+
+#: includes/class-lha-admin.php:167
+msgid "Repairing image %1$d of %2$d..."
+msgstr ""
+
+#: includes/class-lha-admin.php:166
+msgid "Select at least one link to repair."
+msgstr ""
+
+#: includes/class-lha-list-table.php:161
+msgid "Suggestion: verify and replace this missing WordPress image size with its original image."
+msgstr ""
+
+#: includes/class-lha-image-repair.php:108
+msgid "The image URL could not be repaired."
+msgstr ""
+
+#: includes/class-lha-image-repair.php:87
+msgid "This link is not an eligible internal 404 image size."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-image-repair.php:123
+msgid "Stale image record removed."
 msgstr ""
