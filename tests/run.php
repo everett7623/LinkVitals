@@ -84,6 +84,7 @@ require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-extractor.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-checker.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-image-repair.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php';
 
@@ -488,6 +489,29 @@ lha_test(
         lha_assert_same( true, is_string( $table ) && str_contains( $table, 'repair_image_variants' ) );
         lha_assert_same( true, is_string( $client ) && str_contains( $client, "action: 'lha_repair_image_variant'" ) );
         lha_assert_same( true, is_string( $client ) && str_contains( $client, 'index++' ) );
+    }
+);
+
+lha_test(
+    'maps every dashboard statistic card to a supported report filter',
+    static function(): void {
+        $cards = LHA_Admin::get_dashboard_stat_cards();
+
+        lha_assert_same( 13, count( $cards ) );
+        lha_assert_same(
+            array( '', 'internal', 'external', 'broken', '404', '5xx', 'server_error', 'redirect', 'timeout', 'ssl_error', 'dns_error', 'forbidden', 'ignored' ),
+            array_column( $cards, 'filter' )
+        );
+
+        foreach ( $cards as $card ) {
+            lha_assert_same( $card['filter'], LHA_DB::sanitize_report_filter_key( $card['filter'] ) );
+        }
+
+        $admin = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
+        $css   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/assets/css/admin.css' );
+
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'class="lha-stat-card lha-stat-card-link' ) );
+        lha_assert_same( true, is_string( $css ) && str_contains( $css, '.lha-stat-card-link:focus' ) );
     }
 );
 

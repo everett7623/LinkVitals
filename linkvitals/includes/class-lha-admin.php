@@ -242,6 +242,29 @@ class LHA_Admin {
     }
 
     /**
+     * Get dashboard statistic-card definitions and report filters.
+     *
+     * @return array<int, array{stat:string,label:string,filter:string,class:string}>
+     */
+    public static function get_dashboard_stat_cards(): array {
+        return array(
+            array( 'stat' => 'total', 'label' => __( 'Total Links', 'linkvitals' ), 'filter' => '', 'class' => '' ),
+            array( 'stat' => 'internal', 'label' => __( 'Internal', 'linkvitals' ), 'filter' => 'internal', 'class' => '' ),
+            array( 'stat' => 'external', 'label' => __( 'External', 'linkvitals' ), 'filter' => 'external', 'class' => '' ),
+            array( 'stat' => 'broken', 'label' => __( 'Broken', 'linkvitals' ), 'filter' => 'broken', 'class' => 'lha-stat-danger' ),
+            array( 'stat' => 'code_404', 'label' => __( '404 Errors', 'linkvitals' ), 'filter' => '404', 'class' => 'lha-stat-danger' ),
+            array( 'stat' => 'code_5xx', 'label' => __( '5xx Errors', 'linkvitals' ), 'filter' => '5xx', 'class' => 'lha-stat-danger' ),
+            array( 'stat' => 'server_error', 'label' => __( 'Server Errors', 'linkvitals' ), 'filter' => 'server_error', 'class' => 'lha-stat-danger' ),
+            array( 'stat' => 'redirect', 'label' => __( 'Redirects', 'linkvitals' ), 'filter' => 'redirect', 'class' => 'lha-stat-warning' ),
+            array( 'stat' => 'timeout', 'label' => __( 'Timeouts', 'linkvitals' ), 'filter' => 'timeout', 'class' => 'lha-stat-warning' ),
+            array( 'stat' => 'ssl_error', 'label' => __( 'SSL Errors', 'linkvitals' ), 'filter' => 'ssl_error', 'class' => 'lha-stat-warning' ),
+            array( 'stat' => 'dns_error', 'label' => __( 'DNS Errors', 'linkvitals' ), 'filter' => 'dns_error', 'class' => 'lha-stat-danger' ),
+            array( 'stat' => 'forbidden', 'label' => __( 'Forbidden', 'linkvitals' ), 'filter' => 'forbidden', 'class' => 'lha-stat-warning' ),
+            array( 'stat' => 'ignored', 'label' => __( 'Ignored', 'linkvitals' ), 'filter' => 'ignored', 'class' => '' ),
+        );
+    }
+
+    /**
      * Render Dashboard page
      */
     public function render_dashboard(): void {
@@ -255,58 +278,20 @@ class LHA_Admin {
         <div id="lha-dashboard">
                 <!-- Stats Cards -->
                 <div class="lha-stats-grid">
-                    <div class="lha-stat-card">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['total'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'Total Links', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['internal'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'Internal', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['external'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'External', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-danger">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['broken'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'Broken', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-danger">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['code_404'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( '404 Errors', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-danger">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['code_5xx'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( '5xx Errors', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-danger">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['server_error'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'Server Errors', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-warning">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['redirect'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'Redirects', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-warning">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['timeout'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'Timeouts', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-warning">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['ssl_error'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'SSL Errors', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-danger">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['dns_error'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'DNS Errors', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card lha-stat-warning">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['forbidden'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'Forbidden', 'linkvitals' ); ?></span>
-                    </div>
-                    <div class="lha-stat-card">
-                        <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats['ignored'] ) ); ?></span>
-                        <span class="lha-stat-label"><?php esc_html_e( 'Ignored', 'linkvitals' ); ?></span>
-                    </div>
+                    <?php foreach ( self::get_dashboard_stat_cards() as $card ) : ?>
+                        <?php
+                        $report_filter = LHA_DB::sanitize_report_filter_key( $card['filter'] );
+                        $report_args   = array( 'page' => 'lha-dashboard', 'tab' => 'report' );
+                        if ( '' !== $report_filter ) {
+                            $report_args['link_status'] = $report_filter;
+                        }
+                        $report_url = add_query_arg( $report_args, admin_url( 'tools.php' ) );
+                        ?>
+                        <a class="lha-stat-card lha-stat-card-link <?php echo esc_attr( $card['class'] ); ?>" href="<?php echo esc_url( $report_url ); ?>">
+                            <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats[ $card['stat'] ] ?? 0 ) ); ?></span>
+                            <span class="lha-stat-label"><?php echo esc_html( $card['label'] ); ?></span>
+                        </a>
+                    <?php endforeach; ?>
                 </div>
 
                 <!-- Scan Info -->

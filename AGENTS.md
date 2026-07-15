@@ -146,6 +146,8 @@ Recent cleanup already performed:
   completion while another worker still owns queue items
 - added verified original-image recovery for internal 404 image-size URLs,
   with one-click repair and sequential selected-row AJAX processing
+- made every dashboard statistic card a keyboard-accessible entry point to the
+  matching Links Report filter
 
 Known gaps:
 
