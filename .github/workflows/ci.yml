@@ -86,7 +86,9 @@ jobs:
       - name: Install WordPress
         run: |
           wp core download --path="$WP_PATH" --version="${{ matrix.wordpress }}"
-          wp --path="$WP_PATH" core verify-checksums
+          if [ "${{ matrix.wordpress }}" != "latest" ]; then
+            wp --path="$WP_PATH" core verify-checksums
+          fi
           wp --path="$WP_PATH" config create --dbname=wordpress_tests --dbuser=root --dbpass=root --dbhost=127.0.0.1:3306
           wp --path="$WP_PATH" core install --url=http://localhost --title=LinkVitals --admin_user=admin --admin_password=integration-password --admin_email=admin@example.test --skip-email
           mkdir -p "$WP_PATH/wp-content/plugins/linkvitals"
@@ -138,7 +140,6 @@ jobs:
       - name: Install WordPress multisite
         run: |
           wp core download --path="$WP_PATH" --version=latest
-          wp --path="$WP_PATH" core verify-checksums
           wp --path="$WP_PATH" config create --dbname=wordpress_multisite --dbuser=root --dbpass=root --dbhost=127.0.0.1:3306
           wp --path="$WP_PATH" core multisite-install --url=http://localhost --title=LinkVitals-Network --admin_user=admin --admin_password=integration-password --admin_email=admin@example.test --skip-email
           wp --path="$WP_PATH" site create --slug=before-activation --title=Before-Activation --email=before@example.test

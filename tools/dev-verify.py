@@ -661,6 +661,7 @@ def check_stale_occurrence_cleanup(reporter: Reporter) -> None:
             "$wpdb->posts" in db_text,
             "$wpdb->postmeta" in db_text,
             "$wpdb->term_taxonomy" in db_text,
+            "BINARY p.post_type = BINARY o.object_type" in db_text,
             empty_position >= 0,
             extract_position > empty_position,
             delete_position > extract_position,
@@ -751,6 +752,7 @@ def check_ci_workflow(reporter: Reporter) -> None:
         "plugin deactivate linkvitals --network",
         "tests/integration/multisite-verify-deactivation.php",
         "tests/integration/multisite-verify-uninstall.php",
+        'if [ "${{ matrix.wordpress }}" != "latest" ]; then',
     )
     missing = [marker for marker in required if marker not in workflow]
 

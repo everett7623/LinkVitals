@@ -649,7 +649,7 @@ class LHA_DB {
                 $wpdb->prepare(
                     "DELETE o FROM {$occurrences} o
                      LEFT JOIN {$wpdb->posts} p ON p.ID = o.object_id
-                        AND p.post_type = o.object_type
+                        AND BINARY p.post_type = BINARY o.object_type
                         AND p.post_status = %s
                         AND p.post_type IN ({$post_placeholders})
                      WHERE o.object_type NOT IN (%s, %s) AND p.ID IS NULL",

@@ -1081,6 +1081,7 @@ lha_test(
         lha_assert_same( true, is_string( $db ) && str_contains( $db, 'public static function cleanup_stale_occurrences' ) );
         lha_assert_same( true, is_string( $db ) && str_contains( $db, '$wpdb->postmeta' ) );
         lha_assert_same( true, is_string( $db ) && str_contains( $db, '$wpdb->term_taxonomy' ) );
+        lha_assert_same( true, is_string( $db ) && str_contains( $db, 'BINARY p.post_type = BINARY o.object_type' ) );
 
         $item_start = strpos( is_string( $scanner ) ? $scanner : '', 'private function process_queue_item(' );
         $item_end = strpos( is_string( $scanner ) ? $scanner : '', 'private function check_links_batch(', (int) $item_start );

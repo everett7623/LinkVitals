@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.20
+Stable tag: 0.3.21
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,10 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.21 =
+* Makes stale post-occurrence cleanup safe across different WordPress and plugin table collations
+* Keeps checksum verification for fixed WordPress targets without blocking latest-version integration tests on upstream checksum drift
 
 = 0.3.20 =
 * Fixes GitHub Actions workflow validation by using runner-safe WordPress test paths
@@ -292,6 +296,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.21 =
+Fixes stale occurrence cleanup on installations whose WordPress and plugin tables use different collations.
 
 = 0.3.20 =
 Fixes CI startup so the real WordPress integration matrix can run.

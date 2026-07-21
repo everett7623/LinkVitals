@@ -224,6 +224,10 @@ Recent cleanup already performed:
   independently while extraction failures persist errors, retry, and terminate
 - fixed CI workflow compilation by using static runner temporary paths instead
   of the unavailable job-level `runner` expression context
+- made stale post-occurrence cleanup compare post types as binary strings so
+  WordPress core and plugin tables may safely use different utf8mb4 collations
+- limited core checksum verification to fixed WordPress CI targets because the
+  latest release archive and checksum API can briefly drift during rollouts
 
 Known gaps:
 
