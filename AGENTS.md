@@ -222,6 +222,8 @@ Recent cleanup already performed:
   transient parser failure preserves the last known-good scan result
 - added real mixed-batch scanner coverage proving successful objects finish
   independently while extraction failures persist errors, retry, and terminate
+- fixed CI workflow compilation by using static runner temporary paths instead
+  of the unavailable job-level `runner` expression context
 
 Known gaps:
 

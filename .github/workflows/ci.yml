@@ -69,7 +69,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     env:
-      WP_PATH: ${{ runner.temp }}/wordpress
+      WP_PATH: /tmp/linkvitals-wordpress
 
     steps:
       - name: Check out repository
@@ -121,7 +121,7 @@ jobs:
           --health-timeout=5s
           --health-retries=10
     env:
-      WP_PATH: ${{ runner.temp }}/wordpress-multisite
+      WP_PATH: /tmp/linkvitals-wordpress-multisite
 
     steps:
       - name: Check out repository
