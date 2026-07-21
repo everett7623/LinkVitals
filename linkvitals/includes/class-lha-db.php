@@ -221,7 +221,7 @@ class LHA_DB {
      * 1. Trim whitespace and convert to lowercase
      * 2. Remove fragment (#... to end)
      * 3. Remove trailing slash (except for root path '/')
-     * 4. Remove default ports (:80, :443)
+     * 4. Remove scheme-default ports (HTTP :80, HTTPS :443)
      * 5. Remove 'www.' prefix from host
      *
      * @param string $url The URL to normalize.
@@ -244,8 +244,9 @@ class LHA_DB {
             $url = rtrim( $url, '/' );
         }
 
-        // 4. Remove default ports (:80, :443).
-        $url = preg_replace( '#:(80|443)(?=/|$)#', '', $url );
+        // 4. Remove only the default port for the URL's scheme.
+        $url = preg_replace( '#^(http://[^/]*):80(?=/|$)#', '$1', $url );
+        $url = preg_replace( '#^(https://[^/]*):443(?=/|$)#', '$1', $url );
 
         // 5. Remove 'www.' prefix from host.
         $url = preg_replace( '#^(https?://)www\.#', '$1', $url );

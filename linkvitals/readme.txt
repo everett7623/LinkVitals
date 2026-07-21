@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.23
+Stable tag: 0.3.24
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,11 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.24 =
+* Adds property-style coverage for URL normalization, extraction, queue claims, and HTTP status boundaries
+* Preserves non-default HTTP ports while removing only scheme-default ports
+* Resolves dot segments and query-only relative URLs against the correct source document
 
 = 0.3.23 =
 * Adds dependency-free occurrence-cleanup SQL branch coverage and unlink transformation tests
@@ -305,6 +310,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.24 =
+Improves URL normalization and relative URL resolution accuracy.
 
 = 0.3.23 =
 Adds repair unlink and occurrence cleanup regression coverage.

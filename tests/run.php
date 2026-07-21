@@ -377,9 +377,26 @@ lha_test(
 lha_test(
     'keeps URL normalization idempotent',
     static function(): void {
-        $input      = ' HTTPS://WWW.Example.COM:443/Path/#section ';
-        $normalized = LHA_DB::normalize_url( $input );
-        lha_assert_same( $normalized, LHA_DB::normalize_url( $normalized ) );
+        $inputs = array(
+            ' HTTPS://WWW.Example.COM:443/Path/#section ',
+            'http://example.com:80/',
+            'https://example.com:80/path/',
+            'http://example.com:443/path#part',
+            'mailto:USER@Example.COM',
+            '/relative/path///',
+            '',
+        );
+
+        foreach ( $inputs as $input ) {
+            $normalized = LHA_DB::normalize_url( $input );
+            lha_assert_same( $normalized, LHA_DB::normalize_url( $normalized ) );
+            lha_assert_same( false, str_contains( $normalized, '#' ) );
+        }
+
+        lha_assert_same( 'https://example.com:80/path', LHA_DB::normalize_url( 'https://example.com:80/path/' ) );
+        lha_assert_same( 'http://example.com:443/path', LHA_DB::normalize_url( 'http://example.com:443/path/' ) );
+        lha_assert_same( 'https://example.com/path', LHA_DB::normalize_url( 'https://example.com:443/path/' ) );
+        lha_assert_same( 'http://example.com/path', LHA_DB::normalize_url( 'http://example.com:80/path/' ) );
     }
 );
 
@@ -433,6 +450,10 @@ lha_test(
             '//cdn.example.com/file.js'  => 'https://cdn.example.com/file.js',
             '/downloads/file.pdf'        => 'https://example.com:8443/downloads/file.pdf',
             'next.html'                  => 'https://example.com:8443/articles/next.html',
+            './next.html'                => 'https://example.com:8443/articles/next.html',
+            '../archive/item.html'       => 'https://example.com:8443/archive/item.html',
+            '?page=2'                    => 'https://example.com:8443/articles/current.html?page=2',
+            '/a/../downloads/./file.pdf' => 'https://example.com:8443/downloads/file.pdf',
         );
 
         foreach ( $cases as $input => $expected ) {
@@ -507,6 +528,30 @@ lha_test(
 );
 
 lha_test(
+    'extracts every supported tag without inventing missing attributes',
+    static function(): void {
+        $extractor = new LHA_Link_Extractor();
+        $links = $extractor->extract(
+            '<a href="/page"> Link <strong>text</strong> </a><a>Missing</a><a href="">Empty</a>' .
+            '<img src="/image.jpg" alt="Image"><iframe src="/frame"></iframe><embed src="/embed">' .
+            '<object data="/object"></object><video src="/movie.mp4"></video><audio src="/sound.mp3"></audio>' .
+            '<source srcset="/small.webp 1x, /large.webp 2x">',
+            'https://example.com/articles/item'
+        );
+
+        lha_assert_same( 10, count( $links ) );
+        lha_assert_same(
+            array( 'a', 'a', 'img', 'iframe', 'embed', 'object', 'video', 'audio', 'source', 'source' ),
+            array_column( $links, 'html_tag' )
+        );
+        lha_assert_same( 'Link text', $links[0]['anchor_text'] );
+        lha_assert_same( 'empty', $links[1]['link_type'] );
+        lha_assert_same( array( 'media', 'media' ), array_slice( array_column( $links, 'link_type' ), 6, 2 ) );
+        lha_assert_same( array( 'image', 'image' ), array_slice( array_column( $links, 'link_type' ), 8, 2 ) );
+    }
+);
+
+lha_test(
     'claims queue batches before selecting their rows',
     static function(): void {
         $wpdb = new LHA_Test_WPDB(
@@ -528,6 +573,75 @@ lha_test(
             array( 'claim_update', 'claim_select', 'claim_update', 'claim_select' ),
             $wpdb->operations
         );
+    }
+);
+
+lha_test(
+    'clamps queue claim sizes and never returns an item twice',
+    static function(): void {
+        $rows = array();
+        for ( $id = 1; $id <= 105; $id++ ) {
+            $rows[] = array(
+                'id'          => $id,
+                'status'      => 'pending',
+                'priority'    => 1,
+                'created_at'  => '2026-07-15 10:00:00',
+                'claim_token' => '',
+            );
+        }
+
+        $wpdb = new LHA_Test_WPDB( $rows );
+        $GLOBALS['wpdb'] = $wpdb;
+        $queue = new LHA_Queue();
+        $first = $queue->get_pending( 1000 );
+        $second = $queue->get_pending( 1000 );
+
+        lha_assert_same( 100, count( $first ) );
+        lha_assert_same( 5, count( $second ) );
+        lha_assert_same( array(), array_intersect( array_column( $first, 'id' ), array_column( $second, 'id' ) ) );
+        lha_assert_same( range( 1, 100 ), array_map( 'intval', array_column( $first, 'id' ) ) );
+        lha_assert_same( range( 101, 105 ), array_map( 'intval', array_column( $second, 'id' ) ) );
+
+        $wpdb = new LHA_Test_WPDB( $rows );
+        $GLOBALS['wpdb'] = $wpdb;
+        $minimum = ( new LHA_Queue() )->get_pending( 0 );
+        lha_assert_same( 1, count( $minimum ) );
+        lha_assert_same( 1, (int) $minimum[0]['id'] );
+    }
+);
+
+lha_test(
+    'classifies every HTTP status boundary consistently',
+    static function(): void {
+        $method = new ReflectionMethod( LHA_Link_Checker::class, 'classify_status' );
+        $method->setAccessible( true );
+        $checker = new LHA_Link_Checker();
+        $cases = array(
+            0   => 'unknown',
+            199 => 'unknown',
+            200 => 'ok',
+            299 => 'ok',
+            300 => 'redirect',
+            399 => 'redirect',
+            400 => 'broken',
+            402 => 'broken',
+            403 => 'forbidden',
+            404 => 'broken',
+            499 => 'broken',
+            500 => 'server_error',
+            519 => 'server_error',
+            520 => 'forbidden',
+            527 => 'forbidden',
+            528 => 'server_error',
+            599 => 'server_error',
+            600 => 'unknown',
+        );
+
+        foreach ( $cases as $code => $expected ) {
+            lha_assert_same( $expected, $method->invoke( $checker, $code, array( 'final_url' => '' ) ) );
+        }
+
+        lha_assert_same( 'redirect', $method->invoke( $checker, 200, array( 'final_url' => 'https://example.com/final' ) ) );
     }
 );
 

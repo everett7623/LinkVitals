@@ -232,6 +232,8 @@ Recent cleanup already performed:
   including HTML whitespace in rel tokens and case-insensitive `_blank`
 - added dependency-free occurrence-cleanup SQL branch and unlink transformation
   tests, plus real duplicate-occurrence unlink snapshot and rollback coverage
+- added property-style URL, extraction, queue-claim, and HTTP status boundary
+  coverage; fixed scheme-specific default ports and RFC-style relative paths
 
 Known gaps:
 
@@ -471,8 +473,6 @@ When continuing development, prefer high-impact correctness and safety work:
 
 Good next tasks:
 
-- add property/unit tests for URL normalization, extraction, queue behavior, and
-  status classification
 - audit remaining report/UI strings for translation coverage
 - verify the current source inside a real WordPress install
 - rebuild release zip after source changes are accepted
