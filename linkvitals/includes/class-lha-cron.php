@@ -17,6 +17,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class LHA_Cron {
 
+    private const NOTIFICATION_BASELINE_TRANSIENT = 'lha_pre_scan_broken_count';
+    private const NOTIFICATION_LOCK_OPTION = 'lha_notification_lock';
+
     /**
      * Constructor.
      *
@@ -24,7 +27,7 @@ class LHA_Cron {
      * and hooks the event handlers for queue processing and scheduled scans.
      */
     public function __construct() {
-        add_filter( 'cron_schedules', array( $this, 'add_schedules' ) );
+        add_filter( 'cron_schedules', array( self::class, 'add_schedules' ) );
         add_action( 'lha_process_queue', array( $this, 'process_queue' ) );
         add_action( 'lha_scheduled_scan', array( $this, 'run_scheduled_scan' ) );
     }
@@ -38,7 +41,7 @@ class LHA_Cron {
      * @param array $schedules Existing cron schedules.
      * @return array Modified schedules with LHA intervals added.
      */
-    public function add_schedules( array $schedules ): array {
+    public static function add_schedules( array $schedules ): array {
         $schedules['lha_every_5_minutes'] = array(
             'interval' => 300,
             'display'  => __( 'Every 5 Minutes (LHA)', 'linkvitals' ),
@@ -77,12 +80,7 @@ class LHA_Cron {
             return;
         }
 
-        // Save pre-scan broken link count so notifications only fire for NEW broken links.
-        if ( false === get_transient( 'lha_pre_scan_broken_count' ) ) {
-            $stats = LHA_DB::get_stats();
-            $pre_scan_count = LHA_DB::get_issue_total_from_stats( $stats );
-            set_transient( 'lha_pre_scan_broken_count', $pre_scan_count, DAY_IN_SECONDS );
-        }
+        self::begin_notification_tracking();
 
         // Process batch via scanner (scanner handles reset_stuck internally).
         $scanner = new LHA_Scanner();
@@ -90,7 +88,7 @@ class LHA_Cron {
 
         // If scan completed, send notification if configured.
         if ( isset( $result['status'] ) && 'completed' === $result['status'] ) {
-            $this->maybe_send_notification();
+            self::complete_notification_tracking();
         }
     }
 
@@ -108,8 +106,14 @@ class LHA_Cron {
             return;
         }
 
+        self::begin_notification_tracking( true );
         $scanner = new LHA_Scanner();
-        $scanner->start_incremental_scan();
+        $result  = $scanner->start_incremental_scan();
+
+        if ( 'started' !== ( $result['status'] ?? '' ) ) {
+            self::clear_notification_tracking();
+            return;
+        }
 
         LHA_Logger::log(
             'scheduled_scan',
@@ -150,76 +154,123 @@ class LHA_Cron {
         }
     }
 
-    /**
-     * Send email notification if new broken links were found.
-     *
-     * Called after a scan completes. Checks if email notifications are enabled
-     * and if there are broken links to report.
-     */
-    private function maybe_send_notification(): void {
+    /** Capture the actionable issue total before a scan starts. */
+    public static function begin_notification_tracking( bool $force = false ): void {
         $settings = get_option( 'lha_settings', array() );
-
         if ( empty( $settings['email_notifications'] ) ) {
-            delete_transient( 'lha_pre_scan_broken_count' );
+            self::clear_notification_tracking();
             return;
         }
 
-        $email = ! empty( $settings['notification_email'] ) ? $settings['notification_email'] : get_option( 'admin_email' );
-        if ( empty( $email ) || ! is_email( $email ) ) {
-            delete_transient( 'lha_pre_scan_broken_count' );
+        if ( ! $force && false !== get_transient( self::NOTIFICATION_BASELINE_TRANSIENT ) ) {
             return;
         }
 
         $stats = LHA_DB::get_stats();
+        set_transient(
+            self::NOTIFICATION_BASELINE_TRANSIENT,
+            LHA_DB::get_issue_total_from_stats( $stats ),
+            7 * DAY_IN_SECONDS
+        );
+    }
 
-        $current_broken_count = LHA_DB::get_issue_total_from_stats( $stats );
+    /** Remove an unused baseline when a scan did not start. */
+    public static function clear_notification_tracking(): void {
+        delete_transient( self::NOTIFICATION_BASELINE_TRANSIENT );
+    }
 
-        // Only send notification if there are NEW broken links compared to pre-scan count.
-        $pre_scan_count = (int) get_transient( 'lha_pre_scan_broken_count' );
-        delete_transient( 'lha_pre_scan_broken_count' );
+    /** Clear notification state when scans are explicitly stopped or reset. */
+    public static function reset_notification_tracking(): void {
+        self::clear_notification_tracking();
+        delete_option( self::NOTIFICATION_LOCK_OPTION );
+    }
 
-        if ( $current_broken_count <= $pre_scan_count ) {
+    /** Send one notification after a scan completes with newly found issues. */
+    public static function complete_notification_tracking(): void {
+        if ( ! self::acquire_notification_lock() ) {
             return;
         }
 
-        $site_name = get_bloginfo( 'name' );
-        $subject   = sprintf(
-            /* translators: %s: site name */
-            __( '[%s] Link Health Audit Report', 'linkvitals' ),
-            $site_name
-        );
+        try {
+            $pre_scan_count = get_transient( self::NOTIFICATION_BASELINE_TRANSIENT );
+            if ( false === $pre_scan_count ) {
+                return;
+            }
+            self::clear_notification_tracking();
 
-        $report_url = admin_url( 'tools.php?page=lha-dashboard&tab=report&link_status=issues' );
+            $settings = get_option( 'lha_settings', array() );
+            if ( empty( $settings['email_notifications'] ) ) {
+                return;
+            }
 
-        $body = sprintf(
-            /* translators: 1: site name, 2: scan time, 3: broken count, 4: 404 count, 5: 5xx count, 6: server error count, 7: timeout count, 8: SSL error count, 9: DNS error count, 10: forbidden count, 11: report URL */
-            __( "Link Health Audit Report for %1\$s\n\nScan completed: %2\$s\n\nBroken Links: %3\$d\n404 Errors: %4\$d\n5xx Errors: %5\$d\nServer Errors: %6\$d\nTimeouts: %7\$d\nSSL Errors: %8\$d\nDNS Errors: %9\$d\nForbidden: %10\$d\n\nView full report: %11\$s", 'linkvitals' ),
-            $site_name,
-            current_time( 'mysql' ),
-            $stats['broken'] ?? 0,
-            $stats['code_404'] ?? 0,
-            $stats['code_5xx'] ?? 0,
-            $stats['server_error'] ?? 0,
-            $stats['timeout'] ?? 0,
-            $stats['ssl_error'] ?? 0,
-            $stats['dns_error'] ?? 0,
-            $stats['forbidden'] ?? 0,
-            $report_url
-        );
+            $email = ! empty( $settings['notification_email'] ) ? $settings['notification_email'] : get_option( 'admin_email' );
+            if ( empty( $email ) || ! is_email( $email ) ) {
+                return;
+            }
 
-        wp_mail( $email, $subject, $body );
+            $stats = LHA_DB::get_stats();
+            $current_broken_count = LHA_DB::get_issue_total_from_stats( $stats );
+            if ( $current_broken_count <= (int) $pre_scan_count ) {
+                return;
+            }
 
-        LHA_Logger::log(
-            'notification',
-            '',
-            '',
-            '',
-            array(),
-            sprintf(
-                /* translators: %s: email address */
-                __( 'Email notification sent to %s', 'linkvitals' ),
-                $email
-            )
-        );
+            $site_name = get_bloginfo( 'name' );
+            $subject   = sprintf(
+                /* translators: %s: site name */
+                __( '[%s] Link Health Audit Report', 'linkvitals' ),
+                $site_name
+            );
+
+            $report_url = admin_url( 'tools.php?page=lha-dashboard&tab=report&link_status=issues' );
+
+            $body = sprintf(
+                /* translators: 1: site name, 2: scan time, 3: broken count, 4: 404 count, 5: 5xx count, 6: server error count, 7: timeout count, 8: SSL error count, 9: DNS error count, 10: forbidden count, 11: report URL */
+                __( "Link Health Audit Report for %1\$s\n\nScan completed: %2\$s\n\nBroken Links: %3\$d\n404 Errors: %4\$d\n5xx Errors: %5\$d\nServer Errors: %6\$d\nTimeouts: %7\$d\nSSL Errors: %8\$d\nDNS Errors: %9\$d\nForbidden: %10\$d\n\nView full report: %11\$s", 'linkvitals' ),
+                $site_name,
+                current_time( 'mysql' ),
+                $stats['broken'] ?? 0,
+                $stats['code_404'] ?? 0,
+                $stats['code_5xx'] ?? 0,
+                $stats['server_error'] ?? 0,
+                $stats['timeout'] ?? 0,
+                $stats['ssl_error'] ?? 0,
+                $stats['dns_error'] ?? 0,
+                $stats['forbidden'] ?? 0,
+                $report_url
+            );
+
+            if ( wp_mail( $email, $subject, $body ) ) {
+                LHA_Logger::log(
+                    'notification',
+                    '',
+                    '',
+                    '',
+                    array(),
+                    sprintf(
+                        /* translators: %s: email address */
+                        __( 'Email notification sent to %s', 'linkvitals' ),
+                        $email
+                    )
+                );
+            }
+        } finally {
+            delete_option( self::NOTIFICATION_LOCK_OPTION );
+        }
+    }
+
+    /** Acquire a short-lived option lock so AJAX and WP-Cron cannot both email. */
+    private static function acquire_notification_lock(): bool {
+        $now = time();
+        if ( add_option( self::NOTIFICATION_LOCK_OPTION, $now, '', false ) ) {
+            return true;
+        }
+
+        $locked_at = (int) get_option( self::NOTIFICATION_LOCK_OPTION, 0 );
+        if ( $locked_at <= 0 || $locked_at < $now - ( 5 * MINUTE_IN_SECONDS ) ) {
+            delete_option( self::NOTIFICATION_LOCK_OPTION );
+            return add_option( self::NOTIFICATION_LOCK_OPTION, $now, '', false );
+        }
+
+        return false;
     }
 }

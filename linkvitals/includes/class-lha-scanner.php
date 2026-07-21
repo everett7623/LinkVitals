@@ -18,9 +18,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class LHA_Scanner {
 
+    private const CONTENT_SCAN_TYPES = array( 'full', 'incremental' );
+    private const DEFAULT_SCAN_CURSOR = '2000-01-01 00:00:00';
+
     private LHA_Queue $queue;
     private LHA_Link_Extractor $extractor;
     private LHA_Link_Checker $checker;
+    private string $last_item_error = '';
 
     public function __construct() {
         $this->queue     = new LHA_Queue();
@@ -37,6 +41,8 @@ class LHA_Scanner {
      * @return array Scan start result with status and total_queued.
      */
     public function start_full_scan(): array {
+        $started_at = current_time( 'mysql' );
+
         // Clear existing queue (Req 9.1).
         $this->queue->clear();
 
@@ -44,6 +50,7 @@ class LHA_Scanner {
 
         // Queue all published posts from public post types, excluding attachments (Req 5.1, 5.6).
         $post_types = $this->get_scannable_post_types();
+        $this->cleanup_stale_sources( $post_types );
         foreach ( $post_types as $post_type ) {
             $total_queued += $this->queue_posts( $post_type );
         }
@@ -54,9 +61,7 @@ class LHA_Scanner {
         // Queue taxonomy terms with non-empty descriptions (Req 5.3).
         $total_queued += $this->queue_taxonomies();
 
-        // Update scan status and last_scan_time (Req 9.4).
-        update_option( 'lha_scan_status', 'running' );
-        update_option( 'lha_last_scan_time', current_time( 'mysql' ) );
+        self::record_scan_start( 'full', $started_at );
 
         return array(
             'status'       => 'started',
@@ -72,8 +77,10 @@ class LHA_Scanner {
      * @return array Scan start result.
      */
     public function start_incremental_scan(): array {
-        $last_scan  = get_option( 'lha_last_scan_time', '2000-01-01 00:00:00' );
+        $last_scan  = self::get_content_scan_cursor();
+        $started_at = current_time( 'mysql' );
         $post_types = $this->get_scannable_post_types();
+        $this->cleanup_stale_sources( $post_types );
 
         $total_queued = 0;
 
@@ -88,8 +95,7 @@ class LHA_Scanner {
         $total_queued += $this->queue_taxonomies( $last_scan );
 
         if ( $total_queued > 0 ) {
-            update_option( 'lha_scan_status', 'running' );
-            update_option( 'lha_last_scan_time', current_time( 'mysql' ) );
+            self::record_scan_start( 'incremental', $started_at );
         }
 
         return array(
@@ -101,35 +107,20 @@ class LHA_Scanner {
     /**
      * Recheck broken links.
      *
-     * Re-queues links with error statuses for fresh HTTP verification (Req 9.3).
-     * Statuses come from LHA_DB::get_issue_statuses().
+     * Resets links with error statuses for bounded background verification.
+     * The existing queue pipeline then drains every pending link in batches.
      *
-     * @return array Result with status and count of rechecked links.
+     * @return array Result with status and count of links queued for rechecking.
      */
     public function recheck_broken(): array {
-        $settings   = get_option( 'lha_settings', array() );
-        $batch_size = isset( $settings['batch_size'] ) ? absint( $settings['batch_size'] ) : 20;
-
-        $broken_links = LHA_DB::get_broken_links( $batch_size );
-
-        if ( empty( $broken_links ) ) {
-            return array( 'status' => 'no_broken_links', 'checked' => 0 );
+        $queued = LHA_DB::reset_issue_links_for_recheck();
+        if ( $queued < 1 ) {
+            return array( 'status' => 'no_broken_links', 'queued' => 0 );
         }
 
-        $checked = 0;
-        foreach ( $broken_links as $link ) {
-            $result = $this->checker->check( $link['url'], $settings );
+        self::record_scan_start( 'recheck' );
 
-            // Detect internal redirect chains (Req 16.4).
-            if ( LHA_Link_Checker::is_internal_redirect_chain( $link['url'], $result ) ) {
-                $result['error_type'] = 'internal_redirect';
-            }
-
-            LHA_DB::update_link_result( (int) $link['id'], $result );
-            $checked++;
-        }
-
-        return array( 'status' => 'completed', 'checked' => $checked );
+        return array( 'status' => 'started', 'queued' => $queued );
     }
 
     /**
@@ -177,8 +168,9 @@ class LHA_Scanner {
                 return array( 'status' => 'checking_links', 'processed' => count( $unchecked ) );
             }
 
-            // All done — set status to completed (Req 8.7).
-            update_option( 'lha_scan_status', 'completed' );
+            // All done — remove links without sources and mark completed (Req 8.7).
+            LHA_DB::cleanup_orphaned_links();
+            $this->record_scan_completion();
             return array( 'status' => 'completed', 'processed' => 0 );
         }
 
@@ -190,7 +182,7 @@ class LHA_Scanner {
             if ( $success ) {
                 $this->queue->update_status( (int) $item['id'], 'done' );
             } else {
-                $this->queue->increment_attempts( (int) $item['id'] );
+                $this->queue->increment_attempts( (int) $item['id'], $this->last_item_error );
             }
 
             $processed++;
@@ -209,9 +201,9 @@ class LHA_Scanner {
      * Process a single queue item.
      *
      * Flow (Req 5.7):
-     * 1. Delete old occurrences for the object
-     * 2. Get content based on object_type
-     * 3. Extract links via LHA_Link_Extractor::extract()
+     * 1. Get content based on object_type
+     * 2. Extract links via LHA_Link_Extractor::extract()
+     * 3. Delete old occurrences only after extraction succeeds
      * 4. For each extracted link: upsert_link(), insert_occurrence()
      * 5. On success: queue marks item done (handled by caller)
      * 6. On failure: queue increments attempts (handled by caller)
@@ -222,6 +214,8 @@ class LHA_Scanner {
     private function process_queue_item( array $item ): bool {
         $object_type = $item['object_type'];
         $object_id   = (int) $item['object_id'];
+
+        $this->last_item_error = '';
 
         $content      = '';
         $source_title = '';
@@ -292,14 +286,15 @@ class LHA_Scanner {
             }
 
             if ( empty( $content ) ) {
-                return true; // No content to extract from.
+                $links = array();
+            } else {
+                // Extract before replacing occurrences so a parser failure does
+                // not discard the last known-good result for this source.
+                $links = $this->extractor->extract( $content, $source_url ?: home_url() );
             }
 
-            // Step 1: Delete old occurrences for this object (Req 5.7).
+            // Replace old occurrences only after extraction succeeds (Req 5.7).
             LHA_DB::delete_occurrences_by_object( $object_type, $object_id );
-
-            // Step 3: Extract links.
-            $links = $this->extractor->extract( $content, $source_url ?: home_url() );
 
             // Step 4: Upsert links and insert occurrences.
             foreach ( $links as $link_data ) {
@@ -327,6 +322,8 @@ class LHA_Scanner {
 
             return true;
         } catch ( \Throwable $e ) {
+            $error = trim( wp_strip_all_tags( $e->getMessage() ) );
+            $this->last_item_error = mb_substr( '' !== $error ? $error : get_class( $e ), 0, 1000 );
             return false;
         }
     }
@@ -527,6 +524,55 @@ class LHA_Scanner {
         return array_values( $post_types );
     }
 
+    /** Remove occurrence records whose source objects are no longer scannable. */
+    private function cleanup_stale_sources( array $post_types ): void {
+        $taxonomies = array_values( get_taxonomies( array( 'public' => true ), 'names' ) );
+        LHA_DB::cleanup_stale_occurrences( $post_types, $taxonomies );
+        LHA_DB::cleanup_orphaned_links();
+    }
+
+    /**
+     * Record the start of work that uses the shared scan pipeline.
+     *
+     * @param string      $scan_type  Full, incremental, recheck, or repair.
+     * @param string|null $started_at Optional pre-queue timestamp for content scans.
+     */
+    public static function record_scan_start( string $scan_type, ?string $started_at = null ): void {
+        if ( false === get_option( 'lha_content_scan_cursor', false ) ) {
+            $legacy_cursor = get_option( 'lha_last_scan_time', '' );
+            if ( is_string( $legacy_cursor ) && '' !== $legacy_cursor ) {
+                update_option( 'lha_content_scan_cursor', $legacy_cursor );
+            }
+        }
+
+        update_option( 'lha_scan_started_at', $started_at ?: current_time( 'mysql' ) );
+        update_option( 'lha_scan_type', $scan_type );
+        update_option( 'lha_scan_status', 'running' );
+    }
+
+    /** Return the last completed content-scan boundary, including legacy data. */
+    private static function get_content_scan_cursor(): string {
+        $cursor = get_option( 'lha_content_scan_cursor', '' );
+        if ( ! is_string( $cursor ) || '' === $cursor ) {
+            $cursor = get_option( 'lha_last_scan_time', self::DEFAULT_SCAN_CURSOR );
+        }
+
+        return is_string( $cursor ) && '' !== $cursor ? $cursor : self::DEFAULT_SCAN_CURSOR;
+    }
+
+    /** Mark shared pipeline work complete and safely promote content-scan state. */
+    private function record_scan_completion(): void {
+        $scan_type  = get_option( 'lha_scan_type', '' );
+        $started_at = get_option( 'lha_scan_started_at', '' );
+
+        if ( in_array( $scan_type, self::CONTENT_SCAN_TYPES, true ) && is_string( $started_at ) && '' !== $started_at ) {
+            update_option( 'lha_content_scan_cursor', $started_at );
+        }
+
+        update_option( 'lha_last_scan_time', current_time( 'mysql' ) );
+        update_option( 'lha_scan_status', 'completed' );
+    }
+
     /**
      * Queue posts of a specific post type.
      *
@@ -629,18 +675,12 @@ class LHA_Scanner {
             }
 
             foreach ( $terms as $term ) {
-                if ( empty( $term->description ) ) {
+                if ( '' === trim( (string) $term->description ) ) {
                     continue;
                 }
 
-                // For incremental scans, taxonomy terms don't have a reliable
-                // modification timestamp. Queue all terms with descriptions
-                // during incremental as well (they are cheap to re-process).
-                if ( $since ) {
-                    // Terms don't have post_modified — skip incremental filtering
-                    // for terms. Full terms are always re-queued.
-                    continue;
-                }
+                // Terms have no reliable modification timestamp, so incremental
+                // scans conservatively re-process every non-empty description.
 
                 $term_link = get_term_link( $term );
                 $this->queue->add(

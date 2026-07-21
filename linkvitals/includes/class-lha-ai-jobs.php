@@ -46,10 +46,14 @@ class LHA_AI_Jobs {
             );
         }
 
-        $active_job_id = sanitize_key( (string) get_transient( self::active_key( $target_post_id ) ) );
+        $active_job_id = sanitize_key( (string) get_transient( self::active_key( $target_post_id, $user_id ) ) );
         if ( '' !== $active_job_id ) {
             $active_state = get_transient( self::state_key( $active_job_id ) );
-            if ( is_array( $active_state ) && in_array( $active_state['status'] ?? '', array( 'queued', 'running' ), true ) ) {
+            if (
+                is_array( $active_state )
+                && $user_id === absint( $active_state['_user_id'] ?? 0 )
+                && in_array( $active_state['status'] ?? '', array( 'queued', 'running' ), true )
+            ) {
                 self::index_job( $user_id, $target_post_id, $active_job_id );
                 return self::public_state( $active_state );
             }
@@ -67,7 +71,7 @@ class LHA_AI_Jobs {
         );
 
         set_transient( self::state_key( $job_id ), $state, self::ACTIVE_TTL );
-        set_transient( self::active_key( $target_post_id ), $job_id, self::ACTIVE_TTL );
+        set_transient( self::active_key( $target_post_id, $user_id ), $job_id, self::ACTIVE_TTL );
         self::index_job( $user_id, $target_post_id, $job_id );
 
         $scheduled = wp_schedule_single_event(
@@ -79,7 +83,7 @@ class LHA_AI_Jobs {
 
         if ( is_wp_error( $scheduled ) || false === $scheduled ) {
             delete_transient( self::state_key( $job_id ) );
-            delete_transient( self::active_key( $target_post_id ) );
+            delete_transient( self::active_key( $target_post_id, $user_id ) );
             self::remove_indexed_job( $user_id, $target_post_id );
             return self::make_state(
                 $job_id,
@@ -96,7 +100,12 @@ class LHA_AI_Jobs {
     public static function process( string $job_id, int $target_post_id, int $user_id ): void {
         $job_id = sanitize_key( $job_id );
         $state  = get_transient( self::state_key( $job_id ) );
-        if ( ! is_array( $state ) || 'queued' !== ( $state['status'] ?? '' ) ) {
+        if (
+            ! is_array( $state )
+            || 'queued' !== ( $state['status'] ?? '' )
+            || $target_post_id !== absint( $state['target_post_id'] ?? 0 )
+            || $user_id !== absint( $state['_user_id'] ?? 0 )
+        ) {
             return;
         }
 
@@ -156,16 +165,16 @@ class LHA_AI_Jobs {
         }
 
         set_transient( self::state_key( $job_id ), $state, self::RESULT_TTL );
-        if ( $job_id === get_transient( self::active_key( $target_post_id ) ) ) {
-            delete_transient( self::active_key( $target_post_id ) );
+        if ( $job_id === get_transient( self::active_key( $target_post_id, $user_id ) ) ) {
+            delete_transient( self::active_key( $target_post_id, $user_id ) );
         }
     }
 
     /** Get one public job state for AJAX polling. */
-    public static function get_status( string $job_id ): array {
+    public static function get_status( string $job_id, int $user_id ): array {
         $job_id = sanitize_key( $job_id );
         $state  = get_transient( self::state_key( $job_id ) );
-        if ( ! is_array( $state ) ) {
+        if ( ! is_array( $state ) || $user_id !== absint( $state['_user_id'] ?? 0 ) ) {
             return self::make_state(
                 $job_id,
                 'failed',
@@ -248,8 +257,8 @@ class LHA_AI_Jobs {
         return 'lha_ai_job_' . $job_id;
     }
 
-    private static function active_key( int $post_id ): string {
-        return 'lha_ai_active_' . $post_id;
+    private static function active_key( int $post_id, int $user_id ): string {
+        return 'lha_ai_active_' . $user_id . '_' . $post_id;
     }
 
     private static function index_key( int $user_id ): string {

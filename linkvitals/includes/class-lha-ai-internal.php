@@ -172,8 +172,10 @@ class LHA_AI_Internal {
                 "SELECT DISTINCT o.object_id
                  FROM {$links} l
                  INNER JOIN {$occurrences} o ON o.link_id = l.id
-                 WHERE l.url_hash = %s",
-                $url_hash
+                 INNER JOIN {$wpdb->posts} p ON p.ID = o.object_id AND p.post_type = o.object_type
+                 WHERE l.url_hash = %s AND p.post_status = %s",
+                $url_hash,
+                'publish'
             )
         );
 

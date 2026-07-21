@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.5
+Stable tag: 0.3.19
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,73 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.19 =
+* Preserves the last known-good occurrences when content extraction throws an exception
+* Persists scanner extraction errors across bounded queue retries
+* Verifies mixed successful and failed objects complete independently within one batch
+
+= 0.3.18 =
+* Verifies failed queue work returns to pending twice and reaches terminal failure on the third attempt
+* Verifies retry transitions persist attempts and errors while clearing obsolete claim tokens
+* Verifies stuck recovery resets only expired processing work and assigns a new token when it is reclaimed
+
+= 0.3.17 =
+* Verifies consecutive scheduled incremental scans queue only posts modified after the completed content cursor
+* Verifies a newly discovered issue sends one notification while a later text-only edit retaining the same issue sends none
+* Verifies existing broken links are not rechecked merely because their source post is rescanned
+
+= 0.3.16 =
+* Verifies paused scans do not advance through WP-Cron and resume to completion without losing queue state
+* Verifies scheduled incremental scans with no changed content preserve scan timestamps and the completed content cursor
+* Verifies no-change scheduled scans leave no notification baseline, email, or misleading start log
+
+= 0.3.15 =
+* Runs the real WP-Cron scanner through multiple one-item batches until completion in integration tests
+* Verifies deterministic HTTP classification, drained queue state, completion timestamps, and content cursor promotion
+* Verifies concurrent completion paths send and log a new-issue notification exactly once
+
+= 0.3.14 =
+* Provisions LinkVitals tables, settings, and queue Cron when a new site is added to a network-active installation
+* Clears scan state and every parameterized AI Cron job on every site during network deactivation
+* Adds multisite integration coverage for existing sites, newly created sites, and mixed per-site uninstall retention
+
+= 0.3.13 =
+* Expands real WordPress integration coverage to posts, taxonomy descriptions, and custom menu links
+* Verifies duplicate occurrence storage, rescan replacement, and stale unpublished-source cleanup
+* Verifies URL replacement snapshots, concurrent-edit rollback protection, and successful guarded rollback
+
+= 0.3.12 =
+* Adds real WordPress integration smoke tests for activation, schema creation, queue claims, security checks, and uninstall cleanup
+* Tests WordPress 6.4 with PHP 8.0 and the latest WordPress release with PHP 8.3 in CI
+* Registers the custom queue recurrence during activation so the initial queue event is scheduled reliably
+
+= 0.3.11 =
+* Adds continuous integration for PHP 8.0 and PHP 8.3 syntax and contract tests
+* Verifies translation catalogs, compiled Chinese translations, and release package structure on every push and pull request
+
+= 0.3.10 =
+* Records the last scan start and successful completion as separate timestamps
+* Uses the start of the last completed content scan as the safe incremental-scan cursor
+* Prevents link-only rechecks and repair refreshes from advancing the content-scan cursor
+
+= 0.3.9 =
+* Sends new-issue notifications consistently when scans finish through AJAX or WP-Cron
+* Prevents concurrent scan workers from sending duplicate completion emails
+* Removes current notification and dynamic AI transient state during eligible single-site or multisite uninstall
+
+= 0.3.8 =
+* Removes stale link occurrences from deleted, unpublished, or no-longer-scannable source objects
+* Clears old occurrences when an existing source object's content becomes empty
+* Automatically removes link rows left without any source occurrences when scans start or finish
+
+= 0.3.7 =
+* Rechecks every actionable link issue through the bounded background scan pipeline instead of stopping after one batch
+* Restores taxonomy-description coverage during incremental scans
+
+= 0.3.6 =
+* Fixed internal-link counts so taxonomy and menu occurrence IDs cannot be mistaken for source posts
+* Isolated AI suggestion jobs by administrator to keep generated edit links within the initiating user's permissions
 
 = 0.3.5 =
 * Added opt-in AI internal-link suggestions for orphaned pages with source-page edit shortcuts
@@ -222,6 +289,48 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.19 =
+Prevents transient extraction failures from erasing prior scan results and adds mixed-batch failure coverage.
+
+= 0.3.18 =
+Adds real database coverage for queue retries, terminal failures, and stale-claim recovery.
+
+= 0.3.17 =
+Adds real WordPress coverage for changed-content incremental scans and notification deltas across consecutive runs.
+
+= 0.3.16 =
+Adds real WordPress coverage for pause/resume behavior and no-change scheduled incremental scans.
+
+= 0.3.15 =
+Adds end-to-end background scan completion and notification deduplication coverage.
+
+= 0.3.14 =
+Completes multisite lifecycle handling for newly created sites, network deactivation, and per-site uninstall retention.
+
+= 0.3.13 =
+Adds end-to-end database coverage for content scanning, occurrence cleanup, and reversible repair behavior.
+
+= 0.3.12 =
+Ensures the recurring queue worker is scheduled on first activation and adds real WordPress lifecycle validation.
+
+= 0.3.11 =
+Adds automated compatibility, translation, and release-package validation for repository changes.
+
+= 0.3.10 =
+Separates scan start, completion, and incremental cursor state so interrupted scans and link-only rechecks cannot skip content changes.
+
+= 0.3.9 =
+Makes scan notifications consistent and completes plugin-state cleanup during uninstall.
+
+= 0.3.8 =
+Keeps link reports accurate when source posts, menu links, taxonomy descriptions, or their content are removed.
+
+= 0.3.7 =
+Ensures issue rechecks and incremental taxonomy scans process all applicable records.
+
+= 0.3.6 =
+Corrects orphan-page analysis and isolates background AI suggestion results between administrators.
 
 = 0.3.5 =
 Adds optional, suggestion-only AI guidance for fixing orphaned pages. Configure a provider and API key under LinkVitals Settings to enable it.

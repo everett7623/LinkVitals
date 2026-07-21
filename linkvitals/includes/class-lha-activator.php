@@ -49,6 +49,34 @@ class LHA_Activator {
     }
 
     /**
+     * Provision plugin data when a site is added to a network where LinkVitals
+     * is active for the network.
+     */
+    public static function activate_new_site( WP_Site $new_site ): void {
+        if ( ! is_multisite() ) {
+            return;
+        }
+
+        $network_plugins = get_site_option( 'active_sitewide_plugins', array() );
+        if ( ! is_array( $network_plugins ) || ! isset( $network_plugins[ LHA_PLUGIN_BASENAME ] ) ) {
+            return;
+        }
+
+        $switched = get_current_blog_id() !== (int) $new_site->blog_id;
+        if ( $switched ) {
+            switch_to_blog( (int) $new_site->blog_id );
+        }
+
+        try {
+            self::activate_single_site();
+        } finally {
+            if ( $switched ) {
+                restore_current_blog();
+            }
+        }
+    }
+
+    /**
      * Run activation routines for a single site.
      */
     private static function activate_single_site(): void {
@@ -121,6 +149,10 @@ class LHA_Activator {
      * Schedule cron events.
      */
     private static function schedule_cron(): void {
+        // Activation runs after plugins_loaded, so register the custom
+        // recurrence before wp_schedule_event() validates it.
+        add_filter( 'cron_schedules', array( LHA_Cron::class, 'add_schedules' ) );
+
         if ( ! wp_next_scheduled( 'lha_process_queue' ) ) {
             wp_schedule_event( time(), 'lha_every_5_minutes', 'lha_process_queue' );
         }

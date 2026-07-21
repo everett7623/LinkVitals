@@ -292,8 +292,9 @@ class LHA_Admin {
         $stats = LHA_DB::get_stats();
         $scanner = new LHA_Scanner();
         $progress = $scanner->get_progress();
-        $last_scan = get_option( 'lha_last_scan_time', '' );
-        $next_scan = wp_next_scheduled( 'lha_scheduled_scan' );
+        $last_scan_started   = get_option( 'lha_scan_started_at', '' );
+        $last_scan_completed = get_option( 'lha_last_scan_time', '' );
+        $next_scan           = wp_next_scheduled( 'lha_scheduled_scan' );
 
         ?>
         <div id="lha-dashboard">
@@ -318,8 +319,12 @@ class LHA_Admin {
                 <!-- Scan Info -->
                 <div class="lha-scan-info">
                     <p>
-                        <strong><?php esc_html_e( 'Last Scan:', 'linkvitals' ); ?></strong>
-                        <?php echo $last_scan ? esc_html( $last_scan ) : esc_html__( 'Never', 'linkvitals' ); ?>
+                        <strong><?php esc_html_e( 'Last Scan Started:', 'linkvitals' ); ?></strong>
+                        <?php echo $last_scan_started ? esc_html( $last_scan_started ) : esc_html__( 'Never', 'linkvitals' ); ?>
+                    </p>
+                    <p>
+                        <strong><?php esc_html_e( 'Last Scan Completed:', 'linkvitals' ); ?></strong>
+                        <?php echo $last_scan_completed ? esc_html( $last_scan_completed ) : esc_html__( 'Never', 'linkvitals' ); ?>
                     </p>
                     <p>
                         <strong><?php esc_html_e( 'Next Scheduled Scan:', 'linkvitals' ); ?></strong>
@@ -1017,6 +1022,7 @@ class LHA_Admin {
 
         $type = isset( $_POST['scan_type'] ) ? sanitize_key( $_POST['scan_type'] ) : 'full';
         $scanner = new LHA_Scanner();
+        LHA_Cron::begin_notification_tracking( true );
 
         switch ( $type ) {
             case 'incremental':
@@ -1028,6 +1034,10 @@ class LHA_Admin {
             default:
                 $result = $scanner->start_full_scan();
                 break;
+        }
+
+        if ( 'started' !== ( $result['status'] ?? '' ) ) {
+            LHA_Cron::clear_notification_tracking();
         }
 
         wp_send_json_success( $result );
@@ -1051,8 +1061,13 @@ class LHA_Admin {
     public function ajax_process_batch(): void {
         LHA_Security::ajax_check();
 
+        LHA_Cron::begin_notification_tracking();
         $scanner = new LHA_Scanner();
-        $result = $scanner->process_queue_batch();
+        $result  = $scanner->process_queue_batch();
+
+        if ( 'completed' === ( $result['status'] ?? '' ) ) {
+            LHA_Cron::complete_notification_tracking();
+        }
 
         wp_send_json_success( $result );
     }
@@ -1388,7 +1403,7 @@ class LHA_Admin {
             return;
         }
 
-        $state = LHA_AI_Jobs::get_status( $job_id );
+        $state = LHA_AI_Jobs::get_status( $job_id, get_current_user_id() );
         if ( 'failed' === $state['status'] ) {
             wp_send_json_error( $state );
             return;
@@ -1508,7 +1523,11 @@ class LHA_Admin {
         delete_option( 'lha_scan_status' );
         delete_option( 'lha_scan_progress' );
         delete_option( 'lha_last_scan_time' );
+        delete_option( 'lha_scan_started_at' );
+        delete_option( 'lha_scan_type' );
+        delete_option( 'lha_content_scan_cursor' );
         delete_transient( 'lha_notice_check' );
+        LHA_Cron::reset_notification_tracking();
 
         wp_send_json_success( array(
             'message' => __( 'All plugin data has been reset.', 'linkvitals' ),

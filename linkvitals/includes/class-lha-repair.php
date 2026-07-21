@@ -607,7 +607,12 @@ class LHA_Repair {
             get_permalink( $post ) ?: '',
             1
         );
-        update_option( 'lha_scan_status', 'running' );
+        // Preserve the cursor boundary when this repair joins an active scan.
+        if ( in_array( get_option( 'lha_scan_status', 'idle' ), array( 'running', 'paused' ), true ) ) {
+            update_option( 'lha_scan_status', 'running' );
+        } else {
+            LHA_Scanner::record_scan_start( 'repair' );
+        }
 
         return array(
             'success' => true,
