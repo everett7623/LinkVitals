@@ -228,6 +228,8 @@ Recent cleanup already performed:
   WordPress core and plugin tables may safely use different utf8mb4 collations
 - limited core checksum verification to fixed WordPress CI targets because the
   latest release archive and checksum API can briefly drift during rollouts
+- added dependency-free settings boundary and SEO classification coverage,
+  including HTML whitespace in rel tokens and case-insensitive `_blank`
 
 Known gaps:
 
@@ -468,8 +470,7 @@ When continuing development, prefer high-impact correctness and safety work:
 Good next tasks:
 
 - add property/unit tests for URL normalization, extraction, queue behavior,
-  status classification, settings validation, repair unlinking, SEO detection,
-  and occurrence cleanup
+  status classification, repair unlinking, and occurrence cleanup
 - audit remaining report/UI strings for translation coverage
 - verify the current source inside a real WordPress install
 - rebuild release zip after source changes are accepted

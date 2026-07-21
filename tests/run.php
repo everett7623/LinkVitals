@@ -176,6 +176,7 @@ require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-internal.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-settings.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-seo-checker.php';
 
 class LHA_Test_WPDB {
 
@@ -941,6 +942,97 @@ lha_test(
 
         $schedule_method = new ReflectionMethod( LHA_Cron::class, 'add_schedules' );
         lha_assert_same( true, $schedule_method->isStatic() );
+    }
+);
+
+lha_test(
+    'clamps settings boundaries and rejects unsupported option values',
+    static function(): void {
+        $method = new ReflectionMethod( LHA_Settings::class, 'validate_and_sanitize' );
+        $method->setAccessible( true );
+        $settings = new LHA_Settings();
+
+        $maximums = $method->invoke(
+            $settings,
+            array(
+                'auto_scan'                       => 'yes',
+                'scan_frequency'                  => 'hourly',
+                'batch_size'                      => 1000,
+                'http_timeout'                    => 300,
+                'max_redirects'                   => 100,
+                'proxy_enabled'                   => 1,
+                'proxy_port'                      => 70000,
+                'proxy_type'                      => 'ftp',
+                'ai_provider'                     => 'unsupported',
+                'ai_model_openai'                 => '',
+                'ai_model_claude'                 => '',
+                'repair_history_retention_days'   => 99999,
+                'language'                        => 'zh-cn',
+            )
+        );
+
+        lha_assert_same( 1, $maximums['auto_scan'] );
+        lha_assert_same( 'weekly', $maximums['scan_frequency'] );
+        lha_assert_same( 100, $maximums['batch_size'] );
+        lha_assert_same( 30, $maximums['http_timeout'] );
+        lha_assert_same( 10, $maximums['max_redirects'] );
+        lha_assert_same( 65535, $maximums['proxy_port'] );
+        lha_assert_same( 'http', $maximums['proxy_type'] );
+        lha_assert_same( '', $maximums['ai_provider'] );
+        lha_assert_same( LHA_AI::OPENAI_DEFAULT_MODEL, $maximums['ai_model_openai'] );
+        lha_assert_same( LHA_AI::CLAUDE_DEFAULT_MODEL, $maximums['ai_model_claude'] );
+        lha_assert_same( 3650, $maximums['repair_history_retention_days'] );
+        lha_assert_same( 'zh_CN', $maximums['language'] );
+        lha_assert_same( 1, $maximums['language_manually_selected'] );
+
+        $minimums = $method->invoke(
+            $settings,
+            array(
+                'scan_frequency'                => 'daily',
+                'batch_size'                    => 0,
+                'http_timeout'                  => 0,
+                'max_redirects'                 => 0,
+                'repair_history_retention_days' => 0,
+                'language'                      => 'invalid-locale',
+            )
+        );
+
+        lha_assert_same( 'daily', $minimums['scan_frequency'] );
+        lha_assert_same( 1, $minimums['batch_size'] );
+        lha_assert_same( 1, $minimums['http_timeout'] );
+        lha_assert_same( 1, $minimums['max_redirects'] );
+        lha_assert_same( 0, $minimums['repair_history_retention_days'] );
+        lha_assert_same( 'auto', $minimums['language'] );
+    }
+);
+
+lha_test(
+    'classifies SEO attributes across HTML whitespace and target casing',
+    static function(): void {
+        $safe = LHA_SEO_Checker::analyze_link(
+            "<a href=\"https://external.example\" rel=\"NOFOLLOW\tsponsored\nugc noopener noreferrer\" target=\"_BLANK\">Safe</a>"
+        );
+
+        lha_assert_same( true, $safe['has_nofollow'] );
+        lha_assert_same( true, $safe['has_sponsored'] );
+        lha_assert_same( true, $safe['has_ugc'] );
+        lha_assert_same( true, $safe['has_noopener'] );
+        lha_assert_same( true, $safe['has_noreferrer'] );
+        lha_assert_same( true, $safe['has_target_blank'] );
+        lha_assert_same( false, $safe['is_http'] );
+        lha_assert_same( array(), $safe['issues'] );
+
+        $unsafe = LHA_SEO_Checker::analyze_link(
+            '<a href="https://external.example" target="_blank">Unsafe</a>',
+            'http://external.example'
+        );
+        lha_assert_same(
+            array( 'missing_nofollow', 'missing_noopener_noreferrer', 'http_not_https' ),
+            $unsafe['issues']
+        );
+
+        $not_link = LHA_SEO_Checker::analyze_link( '<span>Not a link</span>' );
+        lha_assert_same( array(), $not_link['issues'] );
     }
 );
 

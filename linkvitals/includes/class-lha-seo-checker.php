@@ -64,10 +64,10 @@ class LHA_SEO_Checker {
         $anchor = $anchors->item( 0 );
         $href   = $anchor->getAttribute( 'href' );
         $rel    = strtolower( $anchor->getAttribute( 'rel' ) );
-        $target = $anchor->getAttribute( 'target' );
+        $target = strtolower( $anchor->getAttribute( 'target' ) );
 
         // Parse rel attribute values.
-        $rel_values = array_filter( array_map( 'trim', explode( ' ', $rel ) ) );
+        $rel_values = preg_split( '/\s+/', trim( $rel ) ) ?: array();
 
         $result['has_nofollow']     = in_array( 'nofollow', $rel_values, true );
         $result['has_sponsored']    = in_array( 'sponsored', $rel_values, true );

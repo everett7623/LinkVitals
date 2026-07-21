@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.21
+Stable tag: 0.3.22
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,11 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.22 =
+* Adds dependency-free boundary coverage for settings validation and unsupported option values
+* Adds SEO attribute classification coverage for mixed HTML whitespace, target casing, and insecure links
+* Treats HTML whitespace consistently in rel tokens and recognizes case-insensitive _blank targets
 
 = 0.3.21 =
 * Makes stale post-occurrence cleanup safe across different WordPress and plugin table collations
@@ -296,6 +301,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.22 =
+Improves SEO attribute detection and adds settings validation boundary coverage.
 
 = 0.3.21 =
 Fixes stale occurrence cleanup on installations whose WordPress and plugin tables use different collations.
