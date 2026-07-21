@@ -785,6 +785,52 @@ lha_integration_assert(
     'Rollback did not update the repair-history status.'
 );
 
+$unlink_url = 'https://repair-unlink.example.test/target';
+$unlink_content = '<p><a href="' . $unlink_url . '"><strong>Keep</strong> text</a> and <a href="' . $unlink_url . '">Second</a> plus <a href="https://repair-unlink.example.test/keep">Other</a></p>';
+$unlink_post_id = wp_insert_post(
+    array(
+        'post_type'    => 'post',
+        'post_status'  => 'publish',
+        'post_title'   => 'LinkVitals Unlink Fixture',
+        'post_content' => $unlink_content,
+    ),
+    true
+);
+lha_integration_assert( is_int( $unlink_post_id ) && $unlink_post_id > 0, 'Could not create the unlink fixture.' );
+lha_integration_process_object( $scanner, 'post', $unlink_post_id );
+$unlink_link_id = (int) $wpdb->get_var(
+    $wpdb->prepare(
+        "SELECT id FROM " . LHA_DB::table( 'links' ) . " WHERE url_hash = %s",
+        hash( 'sha256', LHA_DB::normalize_url( $unlink_url ) )
+    )
+);
+lha_integration_assert( $unlink_link_id > 0, 'Could not find the link to unlink.' );
+$unlink_result = $repair->unlink( $unlink_link_id, $unlink_post_id );
+lha_integration_assert( true === $unlink_result['success'], 'The unlink operation failed.' );
+lha_integration_assert( 2 === $unlink_result['unlinked'], 'The unlink count did not include duplicate occurrences.' );
+$unlink_updated_content = (string) get_post( $unlink_post_id )->post_content;
+lha_integration_assert( str_contains( $unlink_updated_content, '<strong>Keep</strong> text' ), 'The unlink did not preserve anchor text.' );
+lha_integration_assert( str_contains( $unlink_updated_content, 'href="https://repair-unlink.example.test/keep"' ), 'The unlink changed an unmatched anchor.' );
+lha_integration_assert( ! str_contains( $unlink_updated_content, $unlink_url ), 'The unlink left the target URL in post content.' );
+lha_integration_assert( 0 === lha_integration_occurrence_count( $unlink_url, 'post', $unlink_post_id ), 'The unlink left a stale target occurrence.' );
+$unlink_repair_id = (int) $wpdb->get_var(
+    $wpdb->prepare(
+        "SELECT id FROM {$repairs_table} WHERE object_id = %d AND action_type = %s ORDER BY id DESC LIMIT 1",
+        $unlink_post_id,
+        'link_unlinked'
+    )
+);
+$unlink_repair_record = LHA_DB::get_repair( $unlink_repair_id );
+lha_integration_assert( is_array( $unlink_repair_record ), 'The unlink repair snapshot was not recorded.' );
+lha_integration_assert( $unlink_content === $unlink_repair_record['old_content'], 'The unlink snapshot lost original content.' );
+lha_integration_assert( $unlink_updated_content === $unlink_repair_record['new_content'], 'The unlink snapshot did not store new content.' );
+$unlink_rollback = $repair->rollback( $unlink_repair_id );
+lha_integration_assert( true === $unlink_rollback['success'], 'The unlink repair did not roll back.' );
+lha_integration_assert( $unlink_content === get_post( $unlink_post_id )->post_content, 'Unlink rollback did not restore original content.' );
+wp_delete_post( $unlink_post_id, true );
+LHA_DB::delete_occurrences_by_object( 'post', $unlink_post_id );
+lha_integration_assert( $queue->clear(), 'Could not clear the queue after unlink tests.' );
+
 $settings['delete_data_on_uninstall'] = 1;
 update_option( 'lha_settings', $settings );
 update_option( 'lha_scan_started_at', '2026-07-21 12:00:00' );

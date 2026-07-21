@@ -177,6 +177,7 @@ require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-internal.ph
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-settings.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-seo-checker.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-repair.php';
 
 class LHA_Test_WPDB {
 
@@ -322,6 +323,20 @@ class LHA_Test_Queue extends LHA_Queue {
     public function add( string $object_type, int $object_id, string $object_url = '', int $priority = 5 ): int|false {
         $this->added[] = compact( 'object_type', 'object_id', 'object_url', 'priority' );
         return count( $this->added );
+    }
+}
+
+class LHA_Test_Cleanup_WPDB extends LHA_Test_WPDB {
+
+    public string $postmeta = 'wp_postmeta';
+    public string $term_taxonomy = 'wp_term_taxonomy';
+
+    /** @var array<int, string> */
+    public array $cleanup_queries = array();
+
+    public function query( string $query ): int|false {
+        $this->cleanup_queries[] = $query;
+        return 1;
     }
 }
 
@@ -1191,6 +1206,61 @@ lha_test(
         );
         lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "private string \$last_item_error = '';" ) );
         lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "\$this->queue->increment_attempts( (int) \$item['id'], \$this->last_item_error )" ) );
+    }
+);
+
+lha_test(
+    'cleans occurrence sources with bounded SQL branches and sanitized types',
+    static function(): void {
+        $previous_db = $GLOBALS['wpdb'] ?? null;
+        $cleanup_db  = new LHA_Test_Cleanup_WPDB();
+        $GLOBALS['wpdb'] = $cleanup_db;
+
+        try {
+            $deleted = LHA_DB::cleanup_stale_occurrences(
+                array( 'post', 'POST', 'page', 'Bad Type' ),
+                array( 'category', 'post_tag', 'category' )
+            );
+
+            lha_assert_same( 3, $deleted );
+            lha_assert_same( 3, count( $cleanup_db->cleanup_queries ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[0], "IN ('post', 'page', 'badtype')" ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[0], 'BINARY p.post_type = BINARY o.object_type' ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[1], "o.object_type = 'nav_menu_item'" ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[2], "IN ('category', 'post_tag')" ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[2], "TRIM(tt.description) <> ''" ) );
+
+            $cleanup_db->cleanup_queries = array();
+            $deleted = LHA_DB::cleanup_stale_occurrences( array(), array() );
+
+            lha_assert_same( 3, $deleted );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[0], "NOT IN ('nav_menu_item', 'taxonomy')" ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[2], "WHERE object_type = 'taxonomy'" ) );
+        } finally {
+            if ( null === $previous_db ) {
+                unset( $GLOBALS['wpdb'] );
+            } else {
+                $GLOBALS['wpdb'] = $previous_db;
+            }
+        }
+    }
+);
+
+lha_test(
+    'unlinks matching anchors while preserving unmatched markup and anchor text',
+    static function(): void {
+        $method = new ReflectionMethod( LHA_Repair::class, 'unlink_url_in_content' );
+        $method->setAccessible( true );
+        $content = '<p><a href="https://www.example.com/bad"><strong>Keep</strong> text</a> <a href="/bad">Relative</a> <a href="https://other.example/keep">Other</a></p>';
+
+        $result = $method->invoke( new LHA_Repair(), $content, 'https://example.com/bad' );
+
+        lha_assert_same( 2, $result['count'] );
+        lha_assert_same( true, str_contains( $result['content'], '<strong>Keep</strong> text' ) );
+        lha_assert_same( true, str_contains( $result['content'], 'Relative' ) );
+        lha_assert_same( true, str_contains( $result['content'], '<a href="https://other.example/keep">Other</a>' ) );
+        lha_assert_same( false, str_contains( $result['content'], 'href="https://www.example.com/bad"' ) );
+        lha_assert_same( false, str_contains( $result['content'], 'href="/bad"' ) );
     }
 );
 
