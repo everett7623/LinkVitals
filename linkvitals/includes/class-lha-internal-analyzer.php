@@ -131,6 +131,7 @@ class LHA_Internal_Analyzer {
 
         $table_links       = LHA_DB::table( 'links' );
         $table_occurrences = LHA_DB::table( 'occurrences' );
+        $table_posts       = $wpdb->posts;
 
         // Get all public post types (excluding attachments).
         $post_types = get_post_types( array( 'public' => true ), 'names' );
@@ -161,9 +162,11 @@ class LHA_Internal_Analyzer {
                 "SELECT o.object_id, COUNT(DISTINCT l.id) as outbound_count
                  FROM {$table_occurrences} o
                  INNER JOIN {$table_links} l ON o.link_id = l.id
-                 WHERE l.link_type = %s
+                 INNER JOIN {$table_posts} p ON p.ID = o.object_id AND p.post_type = o.object_type
+                 WHERE l.link_type = %s AND p.post_status = %s
                  GROUP BY o.object_id",
-                'internal'
+                'internal',
+                'publish'
             ),
             ARRAY_A
         );
@@ -212,8 +215,10 @@ class LHA_Internal_Analyzer {
                 "SELECT l.id, l.url, o.object_id as source_post_id
                  FROM {$table_links} l
                  INNER JOIN {$table_occurrences} o ON l.id = o.link_id
-                 WHERE l.link_type = %s",
-                'internal'
+                 INNER JOIN {$table_posts} p ON p.ID = o.object_id AND p.post_type = o.object_type
+                 WHERE l.link_type = %s AND p.post_status = %s",
+                'internal',
+                'publish'
             ),
             ARRAY_A
         );

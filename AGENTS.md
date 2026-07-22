@@ -24,6 +24,10 @@ root is a development and packaging workspace.
 - `linkvitals/languages/` - translation template and Chinese
   translation files.
 - `tests/run.php` - dependency-free PHP contract tests for core static behavior.
+- `tests/integration/` - WP-CLI smoke tests that run against a real temporary
+  WordPress database in GitHub Actions.
+- `.github/workflows/ci.yml` - PHP compatibility, contract, translation, and
+  release-package validation for pushes and pull requests.
 - `generate-mo.php` and `generate-mo.py` - compile `.po` translations to `.mo`.
 - `linkvitals.zip` - WordPress-uploadable release artifact.
 
@@ -32,8 +36,9 @@ Do not edit files inside release zips. Edit plugin source under
 
 ## Commands
 
-There is no Composer setup, test runner, or CI configuration in this repo.
-Verification is currently manual.
+There is no Composer setup. Local verification uses the dependency-free scripts
+below. GitHub Actions also installs temporary WordPress sites backed by MySQL
+for lifecycle and database integration checks.
 
 - Lint a PHP file when PHP is available:
   `php -l "linkvitals/includes/class-lha-<name>.php"`
@@ -49,6 +54,10 @@ Verification is currently manual.
   `python tools/package-release.py`
 - The PHP translation compiler is also available:
   `php generate-mo.php`
+- GitHub Actions runs PHP lint and `tests/run.php` on PHP 8.0 and PHP 8.3,
+  checks translation synchronization and a freshly built release zip, and runs
+  WP-CLI integration smoke tests against WordPress 6.4/PHP 8.0 and latest
+  WordPress/PHP 8.3.
 
 If `php` is not on PATH, say so in the final response and use available checks
 such as targeted source review and translation compilation with Python.
@@ -155,12 +164,81 @@ Recent cleanup already performed:
   candidate IDs, structured provider output, and source-page edit links
 - moved AI provider calls into deduplicated WP-Cron jobs with stable polling
   state and updated the default OpenAI/Claude model contracts
+- restricted internal-link source counts to matching published post
+  occurrences so taxonomy and menu IDs cannot collide with post IDs
+- scoped AI suggestion job deduplication and status polling to the initiating
+  administrator so edit links cannot cross permission contexts
+- changed issue rechecks to reset every actionable link into the bounded
+  background pipeline instead of synchronously checking only one batch
+- restored taxonomy-description processing during incremental scans
+- added scan-start cleanup for occurrences whose posts, custom menu items, or
+  taxonomy descriptions are no longer scannable
+- moved per-object occurrence deletion ahead of the empty-content return so
+  clearing content also clears its old link records
+- automatically removes link rows with no remaining occurrences at scan start
+  and after the queue and pending-link work are fully drained
+- unified AJAX and WP-Cron scan-completion notifications with a shared baseline
+  and short-lived option lock to prevent duplicate email
+- completed uninstall cleanup for current fixed transients, dynamic AI job
+  transients, notification locks, and per-site multisite settings
+- separated scan start and successful completion timestamps, and promoted the
+  start of the last completed content scan as the safe incremental cursor
+- prevented link-only rechecks and repair refreshes from advancing the content
+  scan cursor
+- added GitHub Actions coverage for PHP 8.0/8.3 lint and contracts, translation
+  synchronization, compiled catalogs, and release-package validation
+- added real WordPress activation, schema, queue-claim, security, and uninstall
+  smoke tests across the minimum and current WordPress test targets
+- registered the custom queue recurrence explicitly during activation so the
+  first `lha_process_queue` event is not rejected as an unknown schedule
+- expanded real WordPress tests across posts, taxonomy descriptions, and custom
+  menu links, including duplicate occurrences and stale-source cleanup
+- added real repair replacement and guarded rollback coverage, including refusal
+  when post content changes after the repair snapshot
+- provisioned plugin tables, defaults, and Cron state for sites created after
+  LinkVitals has been activated network-wide
+- changed network deactivation to stop Cron, scans, and notification state on
+  every site instead of only the current network-admin site
+- changed AI Cron cleanup to remove every argument variant instead of only
+  empty-argument events
+- added multisite integration coverage for pre-existing sites, newly created
+  sites, and mixed per-site uninstall retention settings
+- added a deterministic WordPress HTTP fixture that runs the real Cron scanner
+  through multiple bounded batches until completion
+- added real notification interception coverage proving AJAX/Cron completion
+  races consume one baseline and send/log exactly one email
+- added real pause/resume coverage proving WP-Cron leaves queue progress unchanged
+  while paused and drains the same queue after resume
+- added scheduled incremental coverage proving a no-change run preserves scan
+  timestamps and cursor state without email, baseline, or misleading start log
+- added consecutive changed-content incremental coverage proving only modified
+  posts are queued, a new issue sends once, and an unchanged existing issue does
+  not trigger another HTTP check or notification
+- added real queue retry coverage for pending transitions, persisted errors,
+  terminal failure after three attempts, and exclusion from future claims
+- added real stuck-claim recovery coverage proving only expired processing work
+  is reset and that reclaimed work receives a fresh claim token
+- delayed per-source occurrence replacement until extraction succeeds so a
+  transient parser failure preserves the last known-good scan result
+- added real mixed-batch scanner coverage proving successful objects finish
+  independently while extraction failures persist errors, retry, and terminate
+- fixed CI workflow compilation by using static runner temporary paths instead
+  of the unavailable job-level `runner` expression context
+- made stale post-occurrence cleanup compare post types as binary strings so
+  WordPress core and plugin tables may safely use different utf8mb4 collations
+- limited core checksum verification to fixed WordPress CI targets because the
+  latest release archive and checksum API can briefly drift during rollouts
+- added dependency-free settings boundary and SEO classification coverage,
+  including HTML whitespace in rel tokens and case-insensitive `_blank`
+- added dependency-free occurrence-cleanup SQL branch and unlink transformation
+  tests, plus real duplicate-occurrence unlink snapshot and rollback coverage
+- added property-style URL, extraction, queue-claim, and HTTP status boundary
+  coverage; fixed scheme-specific default ports and RFC-style relative paths
 
 Known gaps:
 
-- automated coverage is limited to dependency-free database and extractor
-  contracts in `tests/run.php`; no WordPress integration test environment or
-  CI is wired up
+- WordPress integration coverage is intentionally a bounded WP-CLI smoke suite;
+  browser-driven admin workflows and full PHPUnit fixtures are not wired up
 - AI response envelopes and whitelist validation have contract coverage, but
   live provider calls still require staging verification with real credentials
 - old optional property-test tasks were never implemented
@@ -177,19 +255,23 @@ Known gaps:
 
 Activation calls `LHA_Activator::activate()` to create tables, set default
 options, set scan status, and schedule `lha_process_queue`. Deactivation clears
-plugin cron hooks and sets scan state idle. Uninstall only drops data when the
-`delete_data_on_uninstall` setting is enabled.
+plugin cron hooks and sets scan state idle. Network activation and deactivation
+apply those operations to every existing site. While network-active,
+`wp_initialize_site` provisions the same plugin state for newly created sites.
+Uninstall evaluates `delete_data_on_uninstall` independently on every site and
+only drops data where that setting is enabled.
 
 The scanning pipeline is orchestrated by `LHA_Scanner`:
 
 1. Start scan and populate `LHA_Queue` with content objects.
 2. `lha_process_queue` runs every five minutes, or AJAX calls process a batch.
 3. Queue items are marked `processing`.
-4. Old occurrences for the object are deleted.
-5. `LHA_Link_Extractor` parses content with `DOMDocument`, resolves relative
+4. `LHA_Link_Extractor` parses content with `DOMDocument`, resolves relative
    URLs, classifies each link, and records metadata.
+5. After extraction succeeds, old occurrences for the object are deleted.
 6. `LHA_DB::upsert_link()` deduplicates by SHA-256 of normalized URL.
-7. `LHA_DB::insert_occurrence()` records each appearance.
+7. `LHA_DB::insert_occurrence()` records each appearance. Extraction failures
+   retain the previous occurrences and return the queue item for bounded retry.
 8. Pending links are checked by `LHA_Link_Checker` or skipped/ignored according
    to settings.
 9. When queue and pending links are exhausted, scan status becomes `completed`.
@@ -300,7 +382,12 @@ and keep compatibility with existing lowercase values. The default `auto`
 setting follows the WordPress site language via `get_locale()` and maps `zh*`
 locales to `zh_CN`; other site locales use `en_US`.
 
-Scan state lives in `lha_scan_status`, `lha_last_scan_time`, and `lha_version`.
+Scan state lives in `lha_scan_status`, `lha_scan_started_at`,
+`lha_last_scan_time`, `lha_scan_type`, `lha_content_scan_cursor`, and
+`lha_version`. `lha_last_scan_time` is written only when shared pipeline work
+finishes. Incremental scans use `lha_content_scan_cursor`, which is promoted
+from the start timestamp only after a full or incremental content scan
+completes; link-only rechecks and repair refreshes do not advance it.
 
 ## Admin And AJAX
 
@@ -386,10 +473,6 @@ When continuing development, prefer high-impact correctness and safety work:
 
 Good next tasks:
 
-- add a minimal test harness or WordPress test setup
-- add property/unit tests for URL normalization, extraction, queue behavior,
-  status classification, settings validation, repair unlinking, SEO detection,
-  and occurrence cleanup
 - audit remaining report/UI strings for translation coverage
 - verify the current source inside a real WordPress install
 - rebuild release zip after source changes are accepted

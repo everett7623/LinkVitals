@@ -3,7 +3,7 @@
  * Plugin Name: LinkVitals – Link Health & SEO Auditor
  * Plugin URI: https://github.com/everett7623/LinkVitals
  * Description: Comprehensive link health audit plugin for WordPress. Detects broken links, redirects, timeouts, SSL errors, orphaned pages, and SEO link risks across posts, pages, menus, and custom post types.
- * Version: 0.3.5
+ * Version: 0.3.24
  * Requires at least: 6.4
  * Requires PHP: 8.0
  * Author: everettlabs
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'LHA_VERSION', '0.3.5' );
+define( 'LHA_VERSION', '0.3.24' );
 define( 'LHA_PLUGIN_FILE', __FILE__ );
 define( 'LHA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LHA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -74,6 +74,7 @@ final class LinkVitals_Plugin {
     private function init_hooks(): void {
         add_action( 'init', array( $this, 'load_textdomain' ) );
         add_action( 'admin_init', array( $this, 'check_version' ) );
+        add_action( 'wp_initialize_site', array( LHA_Activator::class, 'activate_new_site' ), 200 );
 
         // Add settings link on plugins page
         add_filter( 'plugin_action_links_' . LHA_PLUGIN_BASENAME, array( $this, 'add_action_links' ) );
@@ -222,9 +223,13 @@ final class LinkVitals_Plugin {
         $reset = LHA_DB::reset_links_for_recheck();
 
         if ( $reset > 0 ) {
-            // Put the scanner into a running state so the queue cron drains the
-            // links that were just reset to 'pending'.
-            update_option( 'lha_scan_status', 'running' );
+            // Preserve an active content scan's type and cursor boundary.
+            $scan_status = get_option( 'lha_scan_status', 'idle' );
+            if ( in_array( $scan_status, array( 'running', 'paused' ), true ) ) {
+                update_option( 'lha_scan_status', 'running' );
+            } else {
+                LHA_Scanner::record_scan_start( 'recheck' );
+            }
         }
     }
 }

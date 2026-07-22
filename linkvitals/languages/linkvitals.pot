@@ -2,7 +2,7 @@
 # This file is distributed under the same license as the LinkVitals package.
 msgid ""
 msgstr ""
-"Project-Id-Version: LinkVitals 0.3.5\n"
+"Project-Id-Version: LinkVitals 0.3.24\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/linkvitals\n"
 "POT-Creation-Date: 2026-07-15 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -1442,4 +1442,14 @@ msgstr ""
 
 #: includes/class-lha-admin.php:187
 msgid "Why"
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-admin.php:326
+msgid "Last Scan Completed:"
+msgstr ""
+
+#: includes/class-lha-admin.php:322
+msgid "Last Scan Started:"
 msgstr ""

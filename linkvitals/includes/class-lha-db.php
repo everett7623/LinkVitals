@@ -221,7 +221,7 @@ class LHA_DB {
      * 1. Trim whitespace and convert to lowercase
      * 2. Remove fragment (#... to end)
      * 3. Remove trailing slash (except for root path '/')
-     * 4. Remove default ports (:80, :443)
+     * 4. Remove scheme-default ports (HTTP :80, HTTPS :443)
      * 5. Remove 'www.' prefix from host
      *
      * @param string $url The URL to normalize.
@@ -244,8 +244,9 @@ class LHA_DB {
             $url = rtrim( $url, '/' );
         }
 
-        // 4. Remove default ports (:80, :443).
-        $url = preg_replace( '#:(80|443)(?=/|$)#', '', $url );
+        // 4. Remove only the default port for the URL's scheme.
+        $url = preg_replace( '#^(http://[^/]*):80(?=/|$)#', '$1', $url );
+        $url = preg_replace( '#^(https://[^/]*):443(?=/|$)#', '$1', $url );
 
         // 5. Remove 'www.' prefix from host.
         $url = preg_replace( '#^(https?://)www\.#', '$1', $url );
@@ -620,6 +621,91 @@ class LHA_DB {
     }
 
     /**
+     * Delete occurrences whose source object is no longer scannable.
+     *
+     * @param array<int, string> $post_types Public post types included in scans.
+     * @param array<int, string> $taxonomies Public taxonomies included in scans.
+     * @return int Number of occurrences deleted.
+     */
+    public static function cleanup_stale_occurrences( array $post_types, array $taxonomies ): int {
+        global $wpdb;
+
+        $occurrences  = self::table( 'occurrences' );
+        $post_types   = array_values( array_unique( array_filter( array_map( 'sanitize_key', $post_types ) ) ) );
+        $taxonomies   = array_values( array_unique( array_filter( array_map( 'sanitize_key', $taxonomies ) ) ) );
+        $deleted      = 0;
+
+        if ( empty( $post_types ) ) {
+            $post_result = $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE FROM {$occurrences} WHERE object_type NOT IN (%s, %s)",
+                    'nav_menu_item',
+                    'taxonomy'
+                )
+            );
+        } else {
+            $post_placeholders = implode( ', ', array_fill( 0, count( $post_types ), '%s' ) );
+            $post_values       = array_merge( array( 'publish' ), $post_types, array( 'nav_menu_item', 'taxonomy' ) );
+            $post_result       = $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE o FROM {$occurrences} o
+                     LEFT JOIN {$wpdb->posts} p ON p.ID = o.object_id
+                        AND BINARY p.post_type = BINARY o.object_type
+                        AND p.post_status = %s
+                        AND p.post_type IN ({$post_placeholders})
+                     WHERE o.object_type NOT IN (%s, %s) AND p.ID IS NULL",
+                    ...$post_values
+                )
+            );
+        }
+        $deleted += max( 0, (int) $post_result );
+
+        $menu_result = $wpdb->query(
+            $wpdb->prepare(
+                "DELETE o FROM {$occurrences} o
+                 LEFT JOIN {$wpdb->posts} p ON p.ID = o.object_id
+                    AND p.post_type = %s
+                    AND p.post_status = %s
+                 LEFT JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+                    AND pm.meta_key = %s
+                    AND pm.meta_value = %s
+                 WHERE o.object_type = %s AND (p.ID IS NULL OR pm.meta_id IS NULL)",
+                'nav_menu_item',
+                'publish',
+                '_menu_item_type',
+                'custom',
+                'nav_menu_item'
+            )
+        );
+        $deleted += max( 0, (int) $menu_result );
+
+        if ( empty( $taxonomies ) ) {
+            $taxonomy_result = $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE FROM {$occurrences} WHERE object_type = %s",
+                    'taxonomy'
+                )
+            );
+        } else {
+            $taxonomy_placeholders = implode( ', ', array_fill( 0, count( $taxonomies ), '%s' ) );
+            $taxonomy_values       = array_merge( $taxonomies, array( 'taxonomy' ) );
+            $taxonomy_result       = $wpdb->query(
+                $wpdb->prepare(
+                    "DELETE o FROM {$occurrences} o
+                     LEFT JOIN {$wpdb->term_taxonomy} tt ON tt.term_id = o.object_id
+                        AND tt.taxonomy IN ({$taxonomy_placeholders})
+                        AND TRIM(tt.description) <> ''
+                     WHERE o.object_type = %s AND tt.term_taxonomy_id IS NULL",
+                    ...$taxonomy_values
+                )
+            );
+        }
+        $deleted += max( 0, (int) $taxonomy_result );
+
+        return $deleted;
+    }
+
+    /**
      * Get dashboard statistics.
      *
      * @return array Associative array of stat counts.
@@ -822,6 +908,29 @@ class LHA_DB {
         );
 
         return $results ?: array();
+    }
+
+    /**
+     * Reset all actionable issue links for background rechecking.
+     *
+     * @return int Number of links reset.
+     */
+    public static function reset_issue_links_for_recheck(): int {
+        global $wpdb;
+
+        $table          = self::table( 'links' );
+        $issue_statuses = self::get_issue_statuses();
+        $placeholders   = implode( ', ', array_fill( 0, count( $issue_statuses ), '%s' ) );
+        $values         = array_merge( array( 'pending' ), $issue_statuses );
+
+        $updated = $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$table} SET status = %s WHERE status IN ({$placeholders}) AND is_ignored = 0",
+                ...$values
+            )
+        );
+
+        return (int) $updated;
     }
 
     /**

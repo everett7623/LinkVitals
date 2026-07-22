@@ -11,6 +11,7 @@ define( 'MINUTE_IN_SECONDS', 60 );
 define( 'DAY_IN_SECONDS', 86400 );
 
 $GLOBALS['lha_test_options'] = array();
+$GLOBALS['lha_test_transients'] = array();
 $GLOBALS['lha_test_db_events'] = array();
 
 if ( ! function_exists( 'sanitize_key' ) ) {
@@ -81,6 +82,50 @@ if ( ! function_exists( 'update_option' ) ) {
     }
 }
 
+if ( ! function_exists( 'get_transient' ) ) {
+    function get_transient( string $name ): mixed {
+        return $GLOBALS['lha_test_transients'][ $name ] ?? false;
+    }
+}
+
+if ( ! function_exists( 'set_transient' ) ) {
+    function set_transient( string $name, mixed $value, int $expiration = 0 ): bool {
+        unset( $expiration );
+        $GLOBALS['lha_test_transients'][ $name ] = $value;
+        return true;
+    }
+}
+
+if ( ! function_exists( 'delete_transient' ) ) {
+    function delete_transient( string $name ): bool {
+        unset( $GLOBALS['lha_test_transients'][ $name ] );
+        return true;
+    }
+}
+
+if ( ! function_exists( 'get_taxonomies' ) ) {
+    function get_taxonomies( array $args = array(), string $output = 'names' ): array {
+        unset( $args, $output );
+        return array( 'category' );
+    }
+}
+
+if ( ! function_exists( 'get_terms' ) ) {
+    function get_terms( array $args = array() ): array {
+        unset( $args );
+        return array(
+            (object) array( 'term_id' => 11, 'description' => 'Category description' ),
+            (object) array( 'term_id' => 12, 'description' => '' ),
+        );
+    }
+}
+
+if ( ! function_exists( 'get_term_link' ) ) {
+    function get_term_link( object $term ): string {
+        return 'https://example.com/category/' . $term->term_id;
+    }
+}
+
 if ( ! function_exists( 'wp_parse_url' ) ) {
     function wp_parse_url( string $url, int $component = -1 ): array|string|int|null|false {
         return parse_url( $url, $component );
@@ -126,14 +171,18 @@ require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-image-repair.p
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-cron.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-internal.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php';
 require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-settings.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-seo-checker.php';
+require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-repair.php';
 
 class LHA_Test_WPDB {
 
     public string $prefix = 'wp_';
+    public string $posts = 'wp_posts';
 
     /** @var array<int, array<string, mixed>> */
     public array $rows;
@@ -164,6 +213,22 @@ class LHA_Test_WPDB {
     }
 
     public function query( string $query ): int|false {
+        if ( str_contains( $query, "UPDATE wp_lha_links SET status = 'pending'" ) ) {
+            $this->operations[] = 'issue_recheck_update';
+            $updated = 0;
+            $issue_statuses = LHA_DB::get_issue_statuses();
+
+            foreach ( $this->rows as &$row ) {
+                if ( empty( $row['is_ignored'] ) && in_array( $row['status'], $issue_statuses, true ) ) {
+                    $row['status'] = 'pending';
+                    $updated++;
+                }
+            }
+            unset( $row );
+
+            return $updated;
+        }
+
         if ( ! str_contains( $query, "SET status = 'processing', claim_token" ) ) {
             return false;
         }
@@ -232,6 +297,9 @@ class LHA_Test_Queue extends LHA_Queue {
     /** @var array<string, int> */
     private array $counts;
 
+    /** @var array<int, array<string, mixed>> */
+    public array $added = array();
+
     /** @param array<string, int> $counts */
     public function __construct( array $counts ) {
         $this->counts = $counts;
@@ -250,6 +318,25 @@ class LHA_Test_Queue extends LHA_Queue {
     public function get_counts(): array {
         $GLOBALS['lha_test_db_events'][] = 'queue_counts';
         return $this->counts;
+    }
+
+    public function add( string $object_type, int $object_id, string $object_url = '', int $priority = 5 ): int|false {
+        $this->added[] = compact( 'object_type', 'object_id', 'object_url', 'priority' );
+        return count( $this->added );
+    }
+}
+
+class LHA_Test_Cleanup_WPDB extends LHA_Test_WPDB {
+
+    public string $postmeta = 'wp_postmeta';
+    public string $term_taxonomy = 'wp_term_taxonomy';
+
+    /** @var array<int, string> */
+    public array $cleanup_queries = array();
+
+    public function query( string $query ): int|false {
+        $this->cleanup_queries[] = $query;
+        return 1;
     }
 }
 
@@ -290,9 +377,26 @@ lha_test(
 lha_test(
     'keeps URL normalization idempotent',
     static function(): void {
-        $input      = ' HTTPS://WWW.Example.COM:443/Path/#section ';
-        $normalized = LHA_DB::normalize_url( $input );
-        lha_assert_same( $normalized, LHA_DB::normalize_url( $normalized ) );
+        $inputs = array(
+            ' HTTPS://WWW.Example.COM:443/Path/#section ',
+            'http://example.com:80/',
+            'https://example.com:80/path/',
+            'http://example.com:443/path#part',
+            'mailto:USER@Example.COM',
+            '/relative/path///',
+            '',
+        );
+
+        foreach ( $inputs as $input ) {
+            $normalized = LHA_DB::normalize_url( $input );
+            lha_assert_same( $normalized, LHA_DB::normalize_url( $normalized ) );
+            lha_assert_same( false, str_contains( $normalized, '#' ) );
+        }
+
+        lha_assert_same( 'https://example.com:80/path', LHA_DB::normalize_url( 'https://example.com:80/path/' ) );
+        lha_assert_same( 'http://example.com:443/path', LHA_DB::normalize_url( 'http://example.com:443/path/' ) );
+        lha_assert_same( 'https://example.com/path', LHA_DB::normalize_url( 'https://example.com:443/path/' ) );
+        lha_assert_same( 'http://example.com/path', LHA_DB::normalize_url( 'http://example.com:80/path/' ) );
     }
 );
 
@@ -346,6 +450,10 @@ lha_test(
             '//cdn.example.com/file.js'  => 'https://cdn.example.com/file.js',
             '/downloads/file.pdf'        => 'https://example.com:8443/downloads/file.pdf',
             'next.html'                  => 'https://example.com:8443/articles/next.html',
+            './next.html'                => 'https://example.com:8443/articles/next.html',
+            '../archive/item.html'       => 'https://example.com:8443/archive/item.html',
+            '?page=2'                    => 'https://example.com:8443/articles/current.html?page=2',
+            '/a/../downloads/./file.pdf' => 'https://example.com:8443/downloads/file.pdf',
         );
 
         foreach ( $cases as $input => $expected ) {
@@ -420,6 +528,30 @@ lha_test(
 );
 
 lha_test(
+    'extracts every supported tag without inventing missing attributes',
+    static function(): void {
+        $extractor = new LHA_Link_Extractor();
+        $links = $extractor->extract(
+            '<a href="/page"> Link <strong>text</strong> </a><a>Missing</a><a href="">Empty</a>' .
+            '<img src="/image.jpg" alt="Image"><iframe src="/frame"></iframe><embed src="/embed">' .
+            '<object data="/object"></object><video src="/movie.mp4"></video><audio src="/sound.mp3"></audio>' .
+            '<source srcset="/small.webp 1x, /large.webp 2x">',
+            'https://example.com/articles/item'
+        );
+
+        lha_assert_same( 10, count( $links ) );
+        lha_assert_same(
+            array( 'a', 'a', 'img', 'iframe', 'embed', 'object', 'video', 'audio', 'source', 'source' ),
+            array_column( $links, 'html_tag' )
+        );
+        lha_assert_same( 'Link text', $links[0]['anchor_text'] );
+        lha_assert_same( 'empty', $links[1]['link_type'] );
+        lha_assert_same( array( 'media', 'media' ), array_slice( array_column( $links, 'link_type' ), 6, 2 ) );
+        lha_assert_same( array( 'image', 'image' ), array_slice( array_column( $links, 'link_type' ), 8, 2 ) );
+    }
+);
+
+lha_test(
     'claims queue batches before selecting their rows',
     static function(): void {
         $wpdb = new LHA_Test_WPDB(
@@ -441,6 +573,75 @@ lha_test(
             array( 'claim_update', 'claim_select', 'claim_update', 'claim_select' ),
             $wpdb->operations
         );
+    }
+);
+
+lha_test(
+    'clamps queue claim sizes and never returns an item twice',
+    static function(): void {
+        $rows = array();
+        for ( $id = 1; $id <= 105; $id++ ) {
+            $rows[] = array(
+                'id'          => $id,
+                'status'      => 'pending',
+                'priority'    => 1,
+                'created_at'  => '2026-07-15 10:00:00',
+                'claim_token' => '',
+            );
+        }
+
+        $wpdb = new LHA_Test_WPDB( $rows );
+        $GLOBALS['wpdb'] = $wpdb;
+        $queue = new LHA_Queue();
+        $first = $queue->get_pending( 1000 );
+        $second = $queue->get_pending( 1000 );
+
+        lha_assert_same( 100, count( $first ) );
+        lha_assert_same( 5, count( $second ) );
+        lha_assert_same( array(), array_intersect( array_column( $first, 'id' ), array_column( $second, 'id' ) ) );
+        lha_assert_same( range( 1, 100 ), array_map( 'intval', array_column( $first, 'id' ) ) );
+        lha_assert_same( range( 101, 105 ), array_map( 'intval', array_column( $second, 'id' ) ) );
+
+        $wpdb = new LHA_Test_WPDB( $rows );
+        $GLOBALS['wpdb'] = $wpdb;
+        $minimum = ( new LHA_Queue() )->get_pending( 0 );
+        lha_assert_same( 1, count( $minimum ) );
+        lha_assert_same( 1, (int) $minimum[0]['id'] );
+    }
+);
+
+lha_test(
+    'classifies every HTTP status boundary consistently',
+    static function(): void {
+        $method = new ReflectionMethod( LHA_Link_Checker::class, 'classify_status' );
+        $method->setAccessible( true );
+        $checker = new LHA_Link_Checker();
+        $cases = array(
+            0   => 'unknown',
+            199 => 'unknown',
+            200 => 'ok',
+            299 => 'ok',
+            300 => 'redirect',
+            399 => 'redirect',
+            400 => 'broken',
+            402 => 'broken',
+            403 => 'forbidden',
+            404 => 'broken',
+            499 => 'broken',
+            500 => 'server_error',
+            519 => 'server_error',
+            520 => 'forbidden',
+            527 => 'forbidden',
+            528 => 'server_error',
+            599 => 'server_error',
+            600 => 'unknown',
+        );
+
+        foreach ( $cases as $code => $expected ) {
+            lha_assert_same( $expected, $method->invoke( $checker, $code, array( 'final_url' => '' ) ) );
+        }
+
+        lha_assert_same( 'redirect', $method->invoke( $checker, 200, array( 'final_url' => 'https://example.com/final' ) ) );
     }
 );
 
@@ -665,6 +866,50 @@ lha_test(
 );
 
 lha_test(
+    'keeps AI background jobs isolated to their initiating user',
+    static function(): void {
+        $state = LHA_AI_Jobs::make_state(
+            'job-1',
+            'queued',
+            42,
+            array( '_user_id' => 7 )
+        );
+        set_transient( 'lha_ai_job_job-1', $state, DAY_IN_SECONDS );
+
+        $owner_state = LHA_AI_Jobs::get_status( 'job-1', 7 );
+        lha_assert_same( 'queued', $owner_state['status'] );
+        lha_assert_same( false, array_key_exists( '_user_id', $owner_state ) );
+
+        $other_user_state = LHA_AI_Jobs::get_status( 'job-1', 8 );
+        lha_assert_same( 'failed', $other_user_state['status'] );
+        lha_assert_same( 0, $other_user_state['target_post_id'] );
+
+        $method = new ReflectionMethod( LHA_AI_Jobs::class, 'active_key' );
+        $method->setAccessible( true );
+        lha_assert_same( 'lha_ai_active_7_42', $method->invoke( null, 42, 7 ) );
+        lha_assert_same( 'lha_ai_active_8_42', $method->invoke( null, 42, 8 ) );
+
+        $jobs = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php' );
+        lha_assert_same( true, is_string( $jobs ) && str_contains( $jobs, '$target_post_id !== absint( $state[\'target_post_id\'] ?? 0 )' ) );
+        lha_assert_same( true, is_string( $jobs ) && str_contains( $jobs, '$user_id !== absint( $state[\'_user_id\'] ?? 0 )' ) );
+    }
+);
+
+lha_test(
+    'limits internal-link source counts to matching published post occurrences',
+    static function(): void {
+        $analyzer = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-internal-analyzer.php' );
+        $ai       = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-internal.php' );
+        $post_join = 'p.ID = o.object_id AND p.post_type = o.object_type';
+
+        lha_assert_same( 2, substr_count( is_string( $analyzer ) ? $analyzer : '', $post_join ) );
+        lha_assert_same( 1, substr_count( is_string( $ai ) ? $ai : '', $post_join ) );
+        lha_assert_same( true, is_string( $analyzer ) && str_contains( $analyzer, 'p.post_status = %s' ) );
+        lha_assert_same( true, is_string( $ai ) && str_contains( $ai, 'p.post_status = %s' ) );
+    }
+);
+
+lha_test(
     'preserves encrypted AI keys when settings password fields stay blank',
     static function(): void {
         $method = new ReflectionMethod( LHA_Settings::class, 'validate_and_sanitize' );
@@ -733,6 +978,194 @@ lha_test(
 );
 
 lha_test(
+    'wires CI for supported PHP versions and release validation',
+    static function(): void {
+        $workflow = file_get_contents( dirname( __DIR__ ) . '/.github/workflows/ci.yml' );
+
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'permissions:' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'contents: read' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, "- '8.0'" ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, "- '8.3'" ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'php tests/run.php' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python tools/i18n-sync.py' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python generate-mo.py' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python tools/package-release.py' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python tools/dev-verify.py' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'wordpress-integration:' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'image: mysql:8.0' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, "wordpress: '6.4'" ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'wordpress: latest' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'tools: wp-cli' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'tests/integration/run.php' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'plugin uninstall linkvitals' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'wordpress-multisite:' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'core multisite-install' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'site create --slug=before-activation' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'plugin activate linkvitals --network' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'site create --slug=after-activation' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'plugin deactivate linkvitals --network' ) );
+
+        $integration = file_get_contents( dirname( __DIR__ ) . '/tests/integration/run.php' );
+        $uninstall   = file_get_contents( dirname( __DIR__ ) . '/tests/integration/verify-uninstall.php' );
+        $activator   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-activator.php' );
+        $deactivator = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-deactivator.php' );
+        $main        = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
+        $multisite   = file_get_contents( dirname( __DIR__ ) . '/tests/integration/multisite-run.php' );
+        $multisite_deactivation = file_get_contents( dirname( __DIR__ ) . '/tests/integration/multisite-verify-deactivation.php' );
+        $multisite_uninstall = file_get_contents( dirname( __DIR__ ) . '/tests/integration/multisite-verify-uninstall.php' );
+
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, "wp_next_scheduled( 'lha_process_queue' )" ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$queue->get_pending( 1 )' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$queue->increment_attempts( $retry_id' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, "\$attempt < 3 ? 'pending' : 'failed'" ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'A terminally failed item was claimed again.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$queue->reset_stuck( 10 )' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'Fresh processing work was reset as stuck.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'The reclaimed item reused its stale claim token.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'LHA_Security::verify_ajax_nonce()' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'wp_insert_post(' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'wp_insert_term(' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'wp_update_nav_menu_item(' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$scanner->start_full_scan()' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'lha_integration_occurrence_count' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$repair->replace_url(' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$repair->rollback( $repair_id )' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'Rollback ignored a newer content edit.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, "add_filter( 'pre_http_request', \$http_filter, 10, 3 )" ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, "add_filter( 'pre_wp_mail', \$mail_filter, 10, 2 )" ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, "while ( 'running' === get_option( 'lha_scan_status' )" ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$cron->process_queue()' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'LHA_Cron::complete_notification_tracking()' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'The deterministic 404 was not classified as broken.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'A second completion path sent a duplicate email.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'A second completion path wrote a duplicate notification log.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$cron->run_scheduled_scan()' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'No-change scheduled scan changed completion time.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'No-change scheduled scan advanced the content cursor.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'No-change scheduled scan sent an email.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$pause_scanner->pause()' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$pause_scanner->resume()' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$paused_progress === $still_paused_progress' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'The resumed scan did not complete.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'lha_integration_force_modified_after' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'lha_integration_pending_queue_count' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'The changed post was not queued.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'An unchanged post was queued.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'The new incremental issue did not send one notification.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'The unchanged post was queued on the second scan.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'An unchanged issue was checked again.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'An unchanged issue sent another notification.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$incremental_logs_before + 2 === $incremental_logs_after' ) );
+        lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, 'false === get_transient( $transient_name )' ) );
+        lha_assert_same( true, is_string( $activator ) && str_contains( $activator, "add_filter( 'cron_schedules', array( LHA_Cron::class, 'add_schedules' ) )" ) );
+        lha_assert_same( true, is_string( $main ) && str_contains( $main, "add_action( 'wp_initialize_site', array( LHA_Activator::class, 'activate_new_site' ), 200 )" ) );
+        lha_assert_same( true, is_string( $activator ) && str_contains( $activator, 'public static function activate_new_site( WP_Site $new_site )' ) );
+        lha_assert_same( true, is_string( $activator ) && str_contains( $activator, 'active_sitewide_plugins' ) );
+        lha_assert_same( true, is_string( $deactivator ) && str_contains( $deactivator, 'public static function deactivate( bool $network_wide = false )' ) );
+        lha_assert_same( true, is_string( $deactivator ) && str_contains( $deactivator, 'private static function deactivate_single_site' ) );
+        lha_assert_same( true, is_string( $deactivator ) && str_contains( $deactivator, 'wp_unschedule_hook( LHA_AI_Jobs::HOOK )' ) );
+        lha_assert_same( true, is_string( $multisite ) && str_contains( $multisite, 'lha_integration_multisite_expectations' ) );
+        lha_assert_same( true, is_string( $multisite_deactivation ) && str_contains( $multisite_deactivation, "wp_next_scheduled( 'lha_process_queue' )" ) );
+        lha_assert_same( true, is_string( $multisite_deactivation ) && str_contains( $multisite_deactivation, 'lha_multisite_has_scheduled_hook' ) );
+        lha_assert_same( true, is_string( $multisite_uninstall ) && str_contains( $multisite_uninstall, "array( 'delete', 'preserve' )" ) );
+
+        $schedule_method = new ReflectionMethod( LHA_Cron::class, 'add_schedules' );
+        lha_assert_same( true, $schedule_method->isStatic() );
+    }
+);
+
+lha_test(
+    'clamps settings boundaries and rejects unsupported option values',
+    static function(): void {
+        $method = new ReflectionMethod( LHA_Settings::class, 'validate_and_sanitize' );
+        $method->setAccessible( true );
+        $settings = new LHA_Settings();
+
+        $maximums = $method->invoke(
+            $settings,
+            array(
+                'auto_scan'                       => 'yes',
+                'scan_frequency'                  => 'hourly',
+                'batch_size'                      => 1000,
+                'http_timeout'                    => 300,
+                'max_redirects'                   => 100,
+                'proxy_enabled'                   => 1,
+                'proxy_port'                      => 70000,
+                'proxy_type'                      => 'ftp',
+                'ai_provider'                     => 'unsupported',
+                'ai_model_openai'                 => '',
+                'ai_model_claude'                 => '',
+                'repair_history_retention_days'   => 99999,
+                'language'                        => 'zh-cn',
+            )
+        );
+
+        lha_assert_same( 1, $maximums['auto_scan'] );
+        lha_assert_same( 'weekly', $maximums['scan_frequency'] );
+        lha_assert_same( 100, $maximums['batch_size'] );
+        lha_assert_same( 30, $maximums['http_timeout'] );
+        lha_assert_same( 10, $maximums['max_redirects'] );
+        lha_assert_same( 65535, $maximums['proxy_port'] );
+        lha_assert_same( 'http', $maximums['proxy_type'] );
+        lha_assert_same( '', $maximums['ai_provider'] );
+        lha_assert_same( LHA_AI::OPENAI_DEFAULT_MODEL, $maximums['ai_model_openai'] );
+        lha_assert_same( LHA_AI::CLAUDE_DEFAULT_MODEL, $maximums['ai_model_claude'] );
+        lha_assert_same( 3650, $maximums['repair_history_retention_days'] );
+        lha_assert_same( 'zh_CN', $maximums['language'] );
+        lha_assert_same( 1, $maximums['language_manually_selected'] );
+
+        $minimums = $method->invoke(
+            $settings,
+            array(
+                'scan_frequency'                => 'daily',
+                'batch_size'                    => 0,
+                'http_timeout'                  => 0,
+                'max_redirects'                 => 0,
+                'repair_history_retention_days' => 0,
+                'language'                      => 'invalid-locale',
+            )
+        );
+
+        lha_assert_same( 'daily', $minimums['scan_frequency'] );
+        lha_assert_same( 1, $minimums['batch_size'] );
+        lha_assert_same( 1, $minimums['http_timeout'] );
+        lha_assert_same( 1, $minimums['max_redirects'] );
+        lha_assert_same( 0, $minimums['repair_history_retention_days'] );
+        lha_assert_same( 'auto', $minimums['language'] );
+    }
+);
+
+lha_test(
+    'classifies SEO attributes across HTML whitespace and target casing',
+    static function(): void {
+        $safe = LHA_SEO_Checker::analyze_link(
+            "<a href=\"https://external.example\" rel=\"NOFOLLOW\tsponsored\nugc noopener noreferrer\" target=\"_BLANK\">Safe</a>"
+        );
+
+        lha_assert_same( true, $safe['has_nofollow'] );
+        lha_assert_same( true, $safe['has_sponsored'] );
+        lha_assert_same( true, $safe['has_ugc'] );
+        lha_assert_same( true, $safe['has_noopener'] );
+        lha_assert_same( true, $safe['has_noreferrer'] );
+        lha_assert_same( true, $safe['has_target_blank'] );
+        lha_assert_same( false, $safe['is_http'] );
+        lha_assert_same( array(), $safe['issues'] );
+
+        $unsafe = LHA_SEO_Checker::analyze_link(
+            '<a href="https://external.example" target="_blank">Unsafe</a>',
+            'http://external.example'
+        );
+        lha_assert_same(
+            array( 'missing_nofollow', 'missing_noopener_noreferrer', 'http_not_https' ),
+            $unsafe['issues']
+        );
+
+        $not_link = LHA_SEO_Checker::analyze_link( '<span>Not a link</span>' );
+        lha_assert_same( array(), $not_link['issues'] );
+    }
+);
+
+lha_test(
     'keeps the scan running while another worker owns queue items',
     static function(): void {
         $GLOBALS['lha_test_options'] = array(
@@ -763,6 +1196,206 @@ lha_test(
         lha_assert_same( array( 'status' => 'running', 'processed' => 0 ), $result );
         lha_assert_same( 'running', $GLOBALS['lha_test_options']['lha_scan_status'] );
         lha_assert_same( array( 'queue_counts' ), $GLOBALS['lha_test_db_events'] );
+    }
+);
+
+lha_test(
+    'queues every actionable issue for bounded background rechecking',
+    static function(): void {
+        $GLOBALS['lha_test_options'] = array( 'lha_scan_status' => 'completed' );
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB(
+            array(
+                array( 'id' => 1, 'status' => 'broken', 'is_ignored' => 0 ),
+                array( 'id' => 2, 'status' => 'timeout', 'is_ignored' => 0 ),
+                array( 'id' => 3, 'status' => 'ok', 'is_ignored' => 0 ),
+                array( 'id' => 4, 'status' => 'dns_error', 'is_ignored' => 1 ),
+            )
+        );
+
+        $scanner = new LHA_Scanner();
+        $result  = $scanner->recheck_broken();
+
+        lha_assert_same( array( 'status' => 'started', 'queued' => 2 ), $result );
+        lha_assert_same( 'running', $GLOBALS['lha_test_options']['lha_scan_status'] );
+        lha_assert_same( array( 'pending', 'pending', 'ok', 'dns_error' ), array_column( $GLOBALS['wpdb']->rows, 'status' ) );
+    }
+);
+
+lha_test(
+    'requeues taxonomy descriptions during incremental scans',
+    static function(): void {
+        $scanner = ( new ReflectionClass( LHA_Scanner::class ) )->newInstanceWithoutConstructor();
+        $queue   = new LHA_Test_Queue( array() );
+
+        $queue_property = new ReflectionProperty( LHA_Scanner::class, 'queue' );
+        $queue_property->setAccessible( true );
+        $queue_property->setValue( $scanner, $queue );
+
+        $method = new ReflectionMethod( LHA_Scanner::class, 'queue_taxonomies' );
+        $method->setAccessible( true );
+        $queued = $method->invoke( $scanner, '2026-07-20 00:00:00' );
+
+        lha_assert_same( 1, $queued );
+        lha_assert_same( 'taxonomy', $queue->added[0]['object_type'] );
+        lha_assert_same( 11, $queue->added[0]['object_id'] );
+    }
+);
+
+lha_test(
+    'separates scan completion time from the safe content cursor',
+    static function(): void {
+        $GLOBALS['lha_test_options'] = array(
+            'lha_settings'       => array( 'batch_size' => 20 ),
+            'lha_last_scan_time' => '2026-07-01 01:00:00',
+        );
+        $GLOBALS['lha_test_db_events'] = array();
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB();
+
+        $scanner = ( new ReflectionClass( LHA_Scanner::class ) )->newInstanceWithoutConstructor();
+        $queue_property = new ReflectionProperty( LHA_Scanner::class, 'queue' );
+        $queue_property->setAccessible( true );
+        $queue_property->setValue(
+            $scanner,
+            new LHA_Test_Queue(
+                array(
+                    'pending'    => 0,
+                    'processing' => 0,
+                    'done'       => 1,
+                    'failed'     => 0,
+                    'paused'     => 0,
+                )
+            )
+        );
+
+        LHA_Scanner::record_scan_start( 'recheck', '2026-07-15 11:50:00' );
+        $legacy_recheck_result = $scanner->process_queue_batch();
+
+        lha_assert_same( 'completed', $legacy_recheck_result['status'] );
+        lha_assert_same( '2026-07-01 01:00:00', $GLOBALS['lha_test_options']['lha_content_scan_cursor'] );
+
+        LHA_Scanner::record_scan_start( 'full', '2026-07-15 11:55:00' );
+        $full_result = $scanner->process_queue_batch();
+
+        lha_assert_same( 'completed', $full_result['status'] );
+        lha_assert_same( '2026-07-15 11:55:00', $GLOBALS['lha_test_options']['lha_content_scan_cursor'] );
+        lha_assert_same( '2026-07-15 12:00:00', $GLOBALS['lha_test_options']['lha_last_scan_time'] );
+
+        LHA_Scanner::record_scan_start( 'recheck', '2026-07-15 12:05:00' );
+        $recheck_result = $scanner->process_queue_batch();
+
+        lha_assert_same( 'completed', $recheck_result['status'] );
+        lha_assert_same( '2026-07-15 11:55:00', $GLOBALS['lha_test_options']['lha_content_scan_cursor'] );
+        lha_assert_same( '2026-07-15 12:05:00', $GLOBALS['lha_test_options']['lha_scan_started_at'] );
+        lha_assert_same( '2026-07-15 12:00:00', $GLOBALS['lha_test_options']['lha_last_scan_time'] );
+    }
+);
+
+lha_test(
+    'cleans stale sources without discarding occurrences before extraction succeeds',
+    static function(): void {
+        $scanner = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
+        $db      = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php' );
+
+        lha_assert_same( 2, substr_count( is_string( $scanner ) ? $scanner : '', '$this->cleanup_stale_sources( $post_types )' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, 'LHA_DB::cleanup_stale_occurrences( $post_types, $taxonomies )' ) );
+        lha_assert_same( true, is_string( $scanner ) && substr_count( $scanner, 'LHA_DB::cleanup_orphaned_links()' ) >= 2 );
+        lha_assert_same( true, is_string( $db ) && str_contains( $db, 'public static function cleanup_stale_occurrences' ) );
+        lha_assert_same( true, is_string( $db ) && str_contains( $db, '$wpdb->postmeta' ) );
+        lha_assert_same( true, is_string( $db ) && str_contains( $db, '$wpdb->term_taxonomy' ) );
+        lha_assert_same( true, is_string( $db ) && str_contains( $db, 'BINARY p.post_type = BINARY o.object_type' ) );
+
+        $item_start = strpos( is_string( $scanner ) ? $scanner : '', 'private function process_queue_item(' );
+        $item_end = strpos( is_string( $scanner ) ? $scanner : '', 'private function check_links_batch(', (int) $item_start );
+        $item_section = false !== $item_start && false !== $item_end ? substr( $scanner, $item_start, $item_end - $item_start ) : '';
+        $empty_position = strpos( $item_section, 'if ( empty( $content ) )' );
+        $extract_position = strpos( $item_section, '$this->extractor->extract(' );
+        $delete_position = strpos( $item_section, 'LHA_DB::delete_occurrences_by_object( $object_type, $object_id )' );
+        lha_assert_same(
+            true,
+            false !== $empty_position &&
+            false !== $extract_position &&
+            false !== $delete_position &&
+            $empty_position < $extract_position &&
+            $extract_position < $delete_position
+        );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "private string \$last_item_error = '';" ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "\$this->queue->increment_attempts( (int) \$item['id'], \$this->last_item_error )" ) );
+    }
+);
+
+lha_test(
+    'cleans occurrence sources with bounded SQL branches and sanitized types',
+    static function(): void {
+        $previous_db = $GLOBALS['wpdb'] ?? null;
+        $cleanup_db  = new LHA_Test_Cleanup_WPDB();
+        $GLOBALS['wpdb'] = $cleanup_db;
+
+        try {
+            $deleted = LHA_DB::cleanup_stale_occurrences(
+                array( 'post', 'POST', 'page', 'Bad Type' ),
+                array( 'category', 'post_tag', 'category' )
+            );
+
+            lha_assert_same( 3, $deleted );
+            lha_assert_same( 3, count( $cleanup_db->cleanup_queries ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[0], "IN ('post', 'page', 'badtype')" ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[0], 'BINARY p.post_type = BINARY o.object_type' ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[1], "o.object_type = 'nav_menu_item'" ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[2], "IN ('category', 'post_tag')" ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[2], "TRIM(tt.description) <> ''" ) );
+
+            $cleanup_db->cleanup_queries = array();
+            $deleted = LHA_DB::cleanup_stale_occurrences( array(), array() );
+
+            lha_assert_same( 3, $deleted );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[0], "NOT IN ('nav_menu_item', 'taxonomy')" ) );
+            lha_assert_same( true, str_contains( $cleanup_db->cleanup_queries[2], "WHERE object_type = 'taxonomy'" ) );
+        } finally {
+            if ( null === $previous_db ) {
+                unset( $GLOBALS['wpdb'] );
+            } else {
+                $GLOBALS['wpdb'] = $previous_db;
+            }
+        }
+    }
+);
+
+lha_test(
+    'unlinks matching anchors while preserving unmatched markup and anchor text',
+    static function(): void {
+        $method = new ReflectionMethod( LHA_Repair::class, 'unlink_url_in_content' );
+        $method->setAccessible( true );
+        $content = '<p><a href="https://www.example.com/bad"><strong>Keep</strong> text</a> <a href="/bad">Relative</a> <a href="https://other.example/keep">Other</a></p>';
+
+        $result = $method->invoke( new LHA_Repair(), $content, 'https://example.com/bad' );
+
+        lha_assert_same( 2, $result['count'] );
+        lha_assert_same( true, str_contains( $result['content'], '<strong>Keep</strong> text' ) );
+        lha_assert_same( true, str_contains( $result['content'], 'Relative' ) );
+        lha_assert_same( true, str_contains( $result['content'], '<a href="https://other.example/keep">Other</a>' ) );
+        lha_assert_same( false, str_contains( $result['content'], 'href="https://www.example.com/bad"' ) );
+        lha_assert_same( false, str_contains( $result['content'], 'href="/bad"' ) );
+    }
+);
+
+lha_test(
+    'shares scan notification completion and fully cleans uninstall state',
+    static function(): void {
+        $admin     = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
+        $cron      = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-cron.php' );
+        $uninstall = file_get_contents( dirname( __DIR__ ) . '/linkvitals/uninstall.php' );
+
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::begin_notification_tracking( true )' ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::complete_notification_tracking()' ) );
+        lha_assert_same( true, is_string( $cron ) && str_contains( $cron, 'add_option( self::NOTIFICATION_LOCK_OPTION' ) );
+        lha_assert_same( true, is_string( $cron ) && str_contains( $cron, 'if ( wp_mail( $email, $subject, $body ) )' ) );
+        lha_assert_same( true, is_string( $cron ) && str_contains( $cron, 'public static function reset_notification_tracking' ) );
+        lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "delete_transient( 'lha_notice_check' )" ) );
+        lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "delete_transient( 'lha_pre_scan_broken_count' )" ) );
+        lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "'_transient_lha_ai_'" ) );
+        lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "'_transient_timeout_lha_ai_'" ) );
+        lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "delete_option( 'lha_content_scan_cursor' )" ) );
+        lha_assert_same( false, is_string( $uninstall ) && str_contains( $uninstall, "if ( ! \$delete_data ) {\n    return;" ) );
     }
 );
 

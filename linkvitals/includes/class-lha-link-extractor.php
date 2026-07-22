@@ -323,28 +323,73 @@ class LHA_Link_Extractor {
 
 		// Absolute path (starts with /).
 		if ( str_starts_with( $url, '/' ) ) {
-			$parsed = wp_parse_url( $base_url );
-			$scheme = $parsed['scheme'] ?? 'https';
-			$host   = $parsed['host'] ?? '';
-			$port   = '';
-			if ( ! empty( $parsed['port'] ) ) {
-				$port = ':' . $parsed['port'];
-			}
-			return $scheme . '://' . $host . $port . $url;
+			return $this->resolve_relative_url( $url, $base_url );
 		}
 
 		// Relative path — resolve against base URL directory.
-		$parsed   = wp_parse_url( $base_url );
-		$scheme   = $parsed['scheme'] ?? 'https';
-		$host     = $parsed['host'] ?? '';
-		$port     = '';
-		if ( ! empty( $parsed['port'] ) ) {
-			$port = ':' . $parsed['port'];
-		}
-		$path     = $parsed['path'] ?? '/';
-		$base_dir = preg_replace( '/\/[^\/]*$/', '/', $path );
+		return $this->resolve_relative_url( $url, $base_url );
+	}
 
-		return $scheme . '://' . $host . $port . $base_dir . $url;
+	/** Resolve a root-relative or path-relative URL against an absolute base URL. */
+	private function resolve_relative_url( string $url, string $base_url ): string {
+		$parsed = wp_parse_url( $base_url );
+		if ( ! is_array( $parsed ) || empty( $parsed['host'] ) ) {
+			return $url;
+		}
+
+		$relative = wp_parse_url( $url );
+		if ( false === $relative ) {
+			return $url;
+		}
+
+		$scheme = $parsed['scheme'] ?? 'https';
+		$host   = $parsed['host'];
+		$port   = ! empty( $parsed['port'] ) ? ':' . (int) $parsed['port'] : '';
+		$path   = (string) ( $parsed['path'] ?? '/' );
+		$relative_path = (string) ( $relative['path'] ?? '' );
+
+		if ( str_starts_with( $relative_path, '/' ) ) {
+			$resolved_path = $relative_path;
+		} elseif ( '' === $relative_path ) {
+			$resolved_path = $path;
+		} else {
+			$base_dir = preg_replace( '/\/[^\/]*$/', '/', $path );
+			$resolved_path = ( $base_dir ?: '/' ) . $relative_path;
+		}
+
+		$resolved_path = $this->normalize_path( $resolved_path );
+		$query = array_key_exists( 'query', $relative )
+			? '?' . $relative['query']
+			: ( '' === $relative_path && isset( $parsed['query'] ) ? '?' . $parsed['query'] : '' );
+		$fragment = isset( $relative['fragment'] ) ? '#' . $relative['fragment'] : '';
+
+		return $scheme . '://' . $host . $port . $resolved_path . $query . $fragment;
+	}
+
+	/** Collapse dot segments in an absolute URL path while preserving a trailing slash. */
+	private function normalize_path( string $path ): string {
+		$has_trailing_slash = str_ends_with( $path, '/' );
+		$segments = array();
+
+		foreach ( explode( '/', $path ) as $segment ) {
+			if ( '' === $segment || '.' === $segment ) {
+				continue;
+			}
+
+			if ( '..' === $segment ) {
+				array_pop( $segments );
+				continue;
+			}
+
+			$segments[] = $segment;
+		}
+
+		$normalized = '/' . implode( '/', $segments );
+		if ( $has_trailing_slash && '/' !== $normalized ) {
+			$normalized .= '/';
+		}
+
+		return $normalized;
 	}
 
 	/**
