@@ -126,69 +126,45 @@ class LHA_SEO_Checker {
         $table_links       = LHA_DB::table( 'links' );
         $table_occurrences = LHA_DB::table( 'occurrences' );
 
-        // Total external link occurrences (anchor tags only).
-        $total_external = (int) $wpdb->get_var(
+        $counts = array(
+            'total_external'              => 0,
+            'missing_nofollow'            => 0,
+            'missing_noopener_noreferrer' => 0,
+            'http_not_https'              => 0,
+        );
+
+        $row = $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT COUNT(*)
+                "SELECT
+                    COUNT(*) AS total_external,
+                    COALESCE(SUM(CASE WHEN o.raw_html NOT LIKE %s THEN 1 ELSE 0 END), 0) AS missing_nofollow,
+                    COALESCE(SUM(CASE
+                        WHEN o.raw_html LIKE %s
+                         AND (o.raw_html NOT LIKE %s OR o.raw_html NOT LIKE %s)
+                        THEN 1 ELSE 0
+                    END), 0) AS missing_noopener_noreferrer,
+                    COALESCE(SUM(CASE WHEN l.url LIKE %s THEN 1 ELSE 0 END), 0) AS http_not_https
                  FROM {$table_occurrences} o
                  INNER JOIN {$table_links} l ON o.link_id = l.id
                  WHERE l.link_type = %s AND o.html_tag = %s AND l.is_ignored = 0",
-                'external',
-                'a'
-            )
-        );
-
-        // Missing nofollow: occurrences whose raw_html does NOT contain 'nofollow'.
-        $missing_nofollow = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT COUNT(*)
-                 FROM {$table_occurrences} o
-                 INNER JOIN {$table_links} l ON o.link_id = l.id
-                 WHERE l.link_type = %s AND o.html_tag = %s AND l.is_ignored = 0
-                   AND o.raw_html NOT LIKE %s",
-                'external',
-                'a',
-                '%nofollow%'
-            )
-        );
-
-        // Missing noopener/noreferrer: occurrences with target="_blank" but missing noopener.
-        $missing_noopener = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT COUNT(*)
-                 FROM {$table_occurrences} o
-                 INNER JOIN {$table_links} l ON o.link_id = l.id
-                 WHERE l.link_type = %s AND o.html_tag = %s AND l.is_ignored = 0
-                   AND o.raw_html LIKE %s
-                   AND ( o.raw_html NOT LIKE %s OR o.raw_html NOT LIKE %s )",
-                'external',
-                'a',
+                '%nofollow%',
                 '%target="_blank"%',
                 '%noopener%',
-                '%noreferrer%'
-            )
-        );
-
-        // HTTP (not HTTPS): external links whose URL starts with 'http://'.
-        $http_not_https = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT COUNT(*)
-                 FROM {$table_occurrences} o
-                 INNER JOIN {$table_links} l ON o.link_id = l.id
-                 WHERE l.link_type = %s AND o.html_tag = %s AND l.is_ignored = 0
-                   AND l.url LIKE %s",
+                '%noreferrer%',
+                'http://%',
                 'external',
-                'a',
-                'http://%'
-            )
+                'a'
+            ),
+            ARRAY_A
         );
 
-        return array(
-            'total_external'              => $total_external,
-            'missing_nofollow'            => $missing_nofollow,
-            'missing_noopener_noreferrer' => $missing_noopener,
-            'http_not_https'              => $http_not_https,
-        );
+        if ( is_array( $row ) ) {
+            foreach ( $counts as $key => $value ) {
+                $counts[ $key ] = (int) ( $row[ $key ] ?? $value );
+            }
+        }
+
+        return $counts;
     }
 
     /**

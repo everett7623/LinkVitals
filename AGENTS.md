@@ -234,6 +234,23 @@ Recent cleanup already performed:
   tests, plus real duplicate-occurrence unlink snapshot and rollback coverage
 - added property-style URL, extraction, queue-claim, and HTTP status boundary
   coverage; fixed scheme-specific default ports and RFC-style relative paths
+- audited report and settings UI strings; translated SEO issue badges through
+  an explicit whitelist instead of exposing internal issue identifiers
+- verified the single-site integration suite against WordPress latest and PHP
+  8.3 in an isolated WordPress Playground SQLite environment
+- fenced queue completion and retry transitions with per-batch claim tokens,
+  preventing stale workers from overwriting work reclaimed by another worker
+- made queue retry transitions atomic and covered stale-worker rejection in the
+  real WordPress integration suite
+- collapsed dashboard and SEO summary counts into one aggregate query each,
+  with real WordPress comparisons against the previous count semantics
+- aligned queue claim indexing with status and priority ordering, and removed
+  redundant duplicate, permalink, term-link, and row-count work at full-scan startup
+- added bounded 100-row queue inserts for full scans while keeping incremental
+  and repair queue writes on the duplicate-aware path
+- paged public taxonomy descriptions by stable term ID in 100-term windows so
+  scan initialization does not load an entire large taxonomy at once
+- disabled unused post/term metadata cache priming during queue population
 
 Known gaps:
 
@@ -326,8 +343,10 @@ Tables use `$wpdb->prefix . 'lha_' . $name`.
   include `link_id`, `object_type`, `object_id`, `source_title`, `source_url`,
   `edit_url`, `html_tag`, `attribute_name`, `anchor_text`, `raw_html`,
   `context_snippet`, timestamps.
-- `lha_queue`: scan objects with `object_type`, `object_id`, `object_url`,
-  `status`, `priority`, `attempts`, `last_error`, `claim_token`, timestamps.
+- `lha_queue`: scan objects with `object_type`, `object_id`, optional
+  `object_url`, `status`, `priority`, `attempts`, `last_error`, `claim_token`,
+  timestamps. Current scanners resolve source URLs during processing rather
+  than precomputing them while populating the queue.
 - `lha_logs`: audit trail with `action_type`, `url`, `old_value`, `new_value`,
   `object_ids`, `message`, `user_id`, `created_at`.
 - `lha_repairs`: reversible source-content repair history. Important fields
@@ -473,8 +492,6 @@ When continuing development, prefer high-impact correctness and safety work:
 
 Good next tasks:
 
-- audit remaining report/UI strings for translation coverage
-- verify the current source inside a real WordPress install
 - rebuild release zip after source changes are accepted
 - verify release zips have exactly one top-level directory,
   `linkvitals/`, with `linkvitals.php` directly inside

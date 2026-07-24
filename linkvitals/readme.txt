@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.24
+Stable tag: 0.3.30
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,31 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.30 =
+* Loads taxonomy descriptions in deterministic pages of 100 terms during scan setup
+* Bounds taxonomy queue-building memory without changing incremental coverage
+* Skips unused post and term metadata cache priming while building the scan queue
+
+= 0.3.29 =
+* Writes full-scan queue items with bounded multi-row inserts of up to 100 objects
+* Keeps duplicate-sensitive incremental and repair queue writes on the existing checked path
+
+= 0.3.28 =
+* Adds a queue index aligned with claim filtering and priority ordering
+* Avoids duplicate checks, permalink lookups, and row-count queries while populating a cleared full-scan queue
+
+= 0.3.27 =
+* Consolidates dashboard link statistics into one conditional aggregate query
+* Consolidates SEO issue statistics into one query while preserving existing counts
+
+= 0.3.26 =
+* Prevents stale scan workers from changing work that another worker has reclaimed
+* Makes queue retry transitions atomic, reducing database round trips and contention
+
+= 0.3.25 =
+* Translates SEO issue badges instead of exposing internal issue identifiers
+* Ignores unknown SEO issue identifiers in the admin report
 
 = 0.3.24 =
 * Adds property-style coverage for URL normalization, extraction, queue claims, and HTTP status boundaries
@@ -310,6 +335,24 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.30 =
+Reduces scan-start memory usage on sites with large public taxonomies.
+
+= 0.3.29 =
+Reduces database round trips while preparing full scans on content-heavy sites.
+
+= 0.3.28 =
+Improves full-scan startup and queue-claim performance on sites with more content.
+
+= 0.3.27 =
+Reduces database work when loading dashboard and SEO statistics on larger sites.
+
+= 0.3.26 =
+Hardens concurrent queue processing so expired workers cannot overwrite newer claims.
+
+= 0.3.25 =
+Improves translation coverage for SEO report issue labels.
 
 = 0.3.24 =
 Improves URL normalization and relative URL resolution accuracy.

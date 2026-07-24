@@ -159,6 +159,7 @@ class LHA_DB {
             KEY status (status),
             KEY priority (priority),
             KEY claim_token (claim_token),
+            KEY claim_order (status, priority, created_at, id),
             KEY object_type_id (object_type, object_id)
         ) {$charset_collate};";
 
@@ -731,44 +732,30 @@ class LHA_DB {
             'ignored'   => 0,
         );
 
-        $stats['total'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+        $row = $wpdb->get_row(
+            "SELECT
+                COUNT(*) AS total,
+                COALESCE(SUM(CASE WHEN link_type = 'internal' THEN 1 ELSE 0 END), 0) AS internal,
+                COALESCE(SUM(CASE WHEN link_type = 'external' THEN 1 ELSE 0 END), 0) AS external,
+                COALESCE(SUM(CASE WHEN status = 'broken' AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS broken,
+                COALESCE(SUM(CASE WHEN http_code = 404 AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS code_404,
+                COALESCE(SUM(CASE WHEN http_code >= 500 AND http_code < 600 AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS code_5xx,
+                COALESCE(SUM(CASE WHEN status = 'server_error' AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS server_error,
+                COALESCE(SUM(CASE WHEN status = 'redirect' AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS redirect,
+                COALESCE(SUM(CASE WHEN status = 'timeout' AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS timeout,
+                COALESCE(SUM(CASE WHEN status = 'ssl_error' AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS ssl_error,
+                COALESCE(SUM(CASE WHEN status = 'dns_error' AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS dns_error,
+                COALESCE(SUM(CASE WHEN status = 'forbidden' AND is_ignored = 0 THEN 1 ELSE 0 END), 0) AS forbidden,
+                COALESCE(SUM(CASE WHEN is_ignored = 1 THEN 1 ELSE 0 END), 0) AS ignored
+             FROM {$table}",
+            ARRAY_A
+        );
 
-        $stats['internal'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE link_type = %s", 'internal' )
-        );
-        $stats['external'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE link_type = %s", 'external' )
-        );
-        $stats['broken'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'broken' )
-        );
-        $stats['code_404'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE http_code = %d AND is_ignored = 0", 404 )
-        );
-        $stats['code_5xx'] = (int) $wpdb->get_var(
-            "SELECT COUNT(*) FROM {$table} WHERE http_code >= 500 AND http_code < 600 AND is_ignored = 0"
-        );
-        $stats['server_error'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'server_error' )
-        );
-        $stats['redirect'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'redirect' )
-        );
-        $stats['timeout'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'timeout' )
-        );
-        $stats['ssl_error'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'ssl_error' )
-        );
-        $stats['dns_error'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'dns_error' )
-        );
-        $stats['forbidden'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'forbidden' )
-        );
-        $stats['ignored'] = (int) $wpdb->get_var(
-            $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE is_ignored = %d", 1 )
-        );
+        if ( is_array( $row ) ) {
+            foreach ( $stats as $key => $value ) {
+                $stats[ $key ] = (int) ( $row[ $key ] ?? $value );
+            }
+        }
 
         return $stats;
     }

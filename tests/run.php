@@ -13,6 +13,8 @@ define( 'DAY_IN_SECONDS', 86400 );
 $GLOBALS['lha_test_options'] = array();
 $GLOBALS['lha_test_transients'] = array();
 $GLOBALS['lha_test_db_events'] = array();
+$GLOBALS['lha_test_terms'] = null;
+$GLOBALS['lha_test_term_queries'] = array();
 
 if ( ! function_exists( 'sanitize_key' ) ) {
     function sanitize_key( mixed $key ): string {
@@ -112,11 +114,17 @@ if ( ! function_exists( 'get_taxonomies' ) ) {
 
 if ( ! function_exists( 'get_terms' ) ) {
     function get_terms( array $args = array() ): array {
-        unset( $args );
-        return array(
-            (object) array( 'term_id' => 11, 'description' => 'Category description' ),
-            (object) array( 'term_id' => 12, 'description' => '' ),
-        );
+        $GLOBALS['lha_test_term_queries'][] = $args;
+        $terms = is_array( $GLOBALS['lha_test_terms'] )
+            ? $GLOBALS['lha_test_terms']
+            : array(
+                (object) array( 'term_id' => 11, 'description' => 'Category description' ),
+                (object) array( 'term_id' => 12, 'description' => '' ),
+            );
+
+        $offset = isset( $args['offset'] ) ? (int) $args['offset'] : 0;
+        $number = isset( $args['number'] ) ? (int) $args['number'] : 0;
+        return $number > 0 ? array_slice( $terms, $offset, $number ) : array_slice( $terms, $offset );
     }
 }
 
@@ -320,9 +328,23 @@ class LHA_Test_Queue extends LHA_Queue {
         return $this->counts;
     }
 
-    public function add( string $object_type, int $object_id, string $object_url = '', int $priority = 5 ): int|false {
-        $this->added[] = compact( 'object_type', 'object_id', 'object_url', 'priority' );
+    public function add( string $object_type, int $object_id, string $object_url = '', int $priority = 5, bool $check_existing = true ): int|false {
+        $this->added[] = compact( 'object_type', 'object_id', 'object_url', 'priority', 'check_existing' );
         return count( $this->added );
+    }
+
+    public function add_many( array $items, bool $check_existing = true ): int {
+        foreach ( $items as $item ) {
+            $this->add(
+                (string) ( $item['object_type'] ?? '' ),
+                (int) ( $item['object_id'] ?? 0 ),
+                (string) ( $item['object_url'] ?? '' ),
+                (int) ( $item['priority'] ?? 5 ),
+                $check_existing
+            );
+        }
+
+        return count( $items );
     }
 }
 
@@ -652,6 +674,47 @@ lha_test(
 
         lha_assert_same( true, is_string( $schema ) && str_contains( $schema, "claim_token varchar(36) NOT NULL DEFAULT ''" ) );
         lha_assert_same( true, is_string( $schema ) && str_contains( $schema, 'KEY claim_token (claim_token)' ) );
+        lha_assert_same( true, is_string( $schema ) && str_contains( $schema, 'KEY claim_order (status, priority, created_at, id)' ) );
+    }
+);
+
+lha_test(
+    'avoids redundant lookups while populating a cleared full-scan queue',
+    static function(): void {
+        $queue = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php' );
+        $scanner = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
+
+        $posts_start = strpos( is_string( $scanner ) ? $scanner : '', 'private function queue_posts(' );
+        $posts_end = strpos( is_string( $scanner ) ? $scanner : '', 'private function queue_nav_menus(', (int) $posts_start );
+        $posts_section = false !== $posts_start && false !== $posts_end ? substr( $scanner, $posts_start, $posts_end - $posts_start ) : '';
+
+        $menus_start = $posts_end;
+        $menus_end = strpos( is_string( $scanner ) ? $scanner : '', 'private function queue_taxonomies(', (int) $menus_start );
+        $menus_section = false !== $menus_start && false !== $menus_end ? substr( $scanner, $menus_start, $menus_end - $menus_start ) : '';
+
+        $terms_start = strpos( is_string( $scanner ) ? $scanner : '', 'private function queue_taxonomies(' );
+        $terms_end = strpos( is_string( $scanner ) ? $scanner : '', '* Pause scanning.', (int) $terms_start );
+        $terms_section = false !== $terms_start && false !== $terms_end ? substr( $scanner, $terms_start, $terms_end - $terms_start ) : '';
+
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'bool $check_existing = true' ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'if ( $check_existing )' ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'private const INSERT_BATCH_SIZE = 100' ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'public function add_many( array $items, bool $check_existing = true ): int' ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'array_chunk( $items, self::INSERT_BATCH_SIZE )' ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'INSERT INTO {$this->table}' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, '$this->queue_posts( $post_type, null, false )' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, '$this->queue_nav_menus( null, false )' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, '$this->queue_taxonomies( null, false )' ) );
+        lha_assert_same( true, str_contains( $posts_section, "'no_found_rows'  => true" ) );
+        lha_assert_same( true, str_contains( $posts_section, "'update_post_meta_cache' => false" ) );
+        lha_assert_same( true, str_contains( $posts_section, "'update_post_term_cache' => false" ) );
+        lha_assert_same( false, str_contains( $posts_section, 'get_permalink(' ) );
+        lha_assert_same( true, str_contains( $menus_section, '$menu_items = wp_get_nav_menu_items(' ) );
+        lha_assert_same( true, str_contains( $menus_section, '$queue_items[] = array(' ) );
+        lha_assert_same( true, str_contains( $menus_section, '$this->queue->add_many( $queue_items, $check_existing )' ) );
+        lha_assert_same( false, str_contains( $terms_section, 'get_term_link(' ) );
+        lha_assert_same( true, str_contains( $posts_section, 'count( $post_ids ) === $args[\'posts_per_page\']' ) );
+        lha_assert_same( true, substr_count( $scanner, '$this->queue->add_many(' ) >= 3 );
     }
 );
 
@@ -1166,6 +1229,62 @@ lha_test(
 );
 
 lha_test(
+    'fences queue completion and retries with the active claim token',
+    static function(): void {
+        $queue   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php' );
+        $scanner = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
+
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'public function update_status( int $id, string $status, string $claim_token ): bool' ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'public function increment_attempts( int $id, string $error, string $claim_token ): bool' ) );
+        lha_assert_same( true, is_string( $queue ) && substr_count( $queue, "WHERE id = %d AND status = 'processing' AND claim_token = %s" ) === 2 );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, "SET status = CASE WHEN attempts + 1 >= %d THEN 'failed' ELSE 'pending' END," ) );
+        lha_assert_same( false, is_string( $queue ) && str_contains( $queue, 'SELECT attempts FROM {$this->table}' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "\$this->queue->update_status( (int) \$item['id'], 'done', \$claim_token )" ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "\$this->queue->increment_attempts( (int) \$item['id'], \$this->last_item_error, \$claim_token )" ) );
+    }
+);
+
+lha_test(
+    'uses one aggregate query for each admin statistics summary',
+    static function(): void {
+        $db  = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php' );
+        $seo = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-seo-checker.php' );
+
+        $stats_start = strpos( is_string( $db ) ? $db : '', 'public static function get_stats()' );
+        $stats_end = strpos( is_string( $db ) ? $db : '', 'public static function get_issue_total_from_stats(', (int) $stats_start );
+        $stats_section = false !== $stats_start && false !== $stats_end ? substr( $db, $stats_start, $stats_end - $stats_start ) : '';
+
+        $seo_start = strpos( is_string( $seo ) ? $seo : '', 'public function get_issue_counts()' );
+        $seo_end = strpos( is_string( $seo ) ? $seo : '', 'public function get_report(', (int) $seo_start );
+        $seo_section = false !== $seo_start && false !== $seo_end ? substr( $seo, $seo_start, $seo_end - $seo_start ) : '';
+
+        lha_assert_same( 1, substr_count( $stats_section, '$wpdb->get_row(' ) );
+        lha_assert_same( 0, substr_count( $stats_section, '$wpdb->get_var(' ) );
+        lha_assert_same( 12, substr_count( $stats_section, 'COALESCE(SUM(CASE WHEN' ) );
+        lha_assert_same( 1, substr_count( $seo_section, '$wpdb->get_row(' ) );
+        lha_assert_same( 0, substr_count( $seo_section, '$wpdb->get_var(' ) );
+        lha_assert_same( true, str_contains( $seo_section, 'AS missing_nofollow' ) );
+        lha_assert_same( true, str_contains( $seo_section, 'AS missing_noopener_noreferrer' ) );
+        lha_assert_same( true, str_contains( $seo_section, 'AS http_not_https' ) );
+    }
+);
+
+lha_test(
+    'renders SEO issue badges through the translation catalog',
+    static function(): void {
+        $admin = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
+
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, "'missing_nofollow'            => __( 'Missing nofollow', 'linkvitals' )" ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, "'missing_noopener_noreferrer' => __( 'Missing noopener/noreferrer', 'linkvitals' )" ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, "'http_not_https'              => __( 'HTTP links', 'linkvitals' )" ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'isset( $issue_labels[ $issue ] )' ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'sanitize_key( wp_unslash( $_GET[\'issue\'] ) )' ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'if ( ! isset( $issue_labels[ $issue_filter ] ) )' ) );
+        lha_assert_same( false, is_string( $admin ) && str_contains( $admin, "str_replace( '_', ' ', \$issue )" ) );
+    }
+);
+
+lha_test(
     'keeps the scan running while another worker owns queue items',
     static function(): void {
         $GLOBALS['lha_test_options'] = array(
@@ -1238,6 +1357,45 @@ lha_test(
         lha_assert_same( 1, $queued );
         lha_assert_same( 'taxonomy', $queue->added[0]['object_type'] );
         lha_assert_same( 11, $queue->added[0]['object_id'] );
+    }
+);
+
+lha_test(
+    'pages large taxonomy sources before adding them to the queue',
+    static function(): void {
+        $scanner = ( new ReflectionClass( LHA_Scanner::class ) )->newInstanceWithoutConstructor();
+        $queue   = new LHA_Test_Queue( array() );
+
+        $queue_property = new ReflectionProperty( LHA_Scanner::class, 'queue' );
+        $queue_property->setAccessible( true );
+        $queue_property->setValue( $scanner, $queue );
+
+        $GLOBALS['lha_test_terms'] = array_map(
+            static fn( int $term_id ): object => (object) array(
+                'term_id'     => $term_id,
+                'description' => "Description {$term_id}",
+            ),
+            range( 1, 205 )
+        );
+        $GLOBALS['lha_test_term_queries'] = array();
+
+        try {
+            $method = new ReflectionMethod( LHA_Scanner::class, 'queue_taxonomies' );
+            $method->setAccessible( true );
+            $queued = $method->invoke( $scanner, null, false );
+
+            lha_assert_same( 205, $queued );
+            lha_assert_same( 205, count( $queue->added ) );
+            lha_assert_same( array( 0, 100, 200 ), array_column( $GLOBALS['lha_test_term_queries'], 'offset' ) );
+            lha_assert_same( array( 100, 100, 100 ), array_column( $GLOBALS['lha_test_term_queries'], 'number' ) );
+            lha_assert_same( array( 'term_id', 'term_id', 'term_id' ), array_column( $GLOBALS['lha_test_term_queries'], 'orderby' ) );
+            lha_assert_same( array( false, false, false ), array_column( $GLOBALS['lha_test_term_queries'], 'update_term_meta_cache' ) );
+            lha_assert_same( false, $queue->added[0]['check_existing'] );
+            lha_assert_same( false, $queue->added[204]['check_existing'] );
+        } finally {
+            $GLOBALS['lha_test_terms'] = null;
+            $GLOBALS['lha_test_term_queries'] = array();
+        }
     }
 );
 
@@ -1319,7 +1477,7 @@ lha_test(
             $extract_position < $delete_position
         );
         lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "private string \$last_item_error = '';" ) );
-        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "\$this->queue->increment_attempts( (int) \$item['id'], \$this->last_item_error )" ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "\$this->queue->increment_attempts( (int) \$item['id'], \$this->last_item_error, \$claim_token )" ) );
     }
 );
 

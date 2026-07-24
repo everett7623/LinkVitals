@@ -92,6 +92,58 @@ function lha_integration_pending_queue_count( string $object_type, int $object_i
     );
 }
 
+/** Calculate dashboard counts with the pre-aggregation query semantics. */
+function lha_integration_expected_link_stats(): array {
+    global $wpdb;
+
+    $table = LHA_DB::table( 'links' );
+
+    return array(
+        'total'        => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ),
+        'internal'     => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE link_type = %s", 'internal' ) ),
+        'external'     => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE link_type = %s", 'external' ) ),
+        'broken'       => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'broken' ) ),
+        'code_404'     => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE http_code = %d AND is_ignored = 0", 404 ) ),
+        'code_5xx'     => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE http_code >= 500 AND http_code < 600 AND is_ignored = 0" ),
+        'server_error' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'server_error' ) ),
+        'redirect'     => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'redirect' ) ),
+        'timeout'      => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'timeout' ) ),
+        'ssl_error'    => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'ssl_error' ) ),
+        'dns_error'    => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'dns_error' ) ),
+        'forbidden'    => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s AND is_ignored = 0", 'forbidden' ) ),
+        'ignored'      => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE is_ignored = %d", 1 ) ),
+    );
+}
+
+/** Calculate SEO counts with the pre-aggregation query semantics. */
+function lha_integration_expected_seo_counts(): array {
+    global $wpdb;
+
+    $links       = LHA_DB::table( 'links' );
+    $occurrences = LHA_DB::table( 'occurrences' );
+    $base        = "FROM {$occurrences} o INNER JOIN {$links} l ON o.link_id = l.id WHERE l.link_type = %s AND o.html_tag = %s AND l.is_ignored = 0";
+
+    return array(
+        'total_external' => (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) {$base}", 'external', 'a' ) ),
+        'missing_nofollow' => (int) $wpdb->get_var(
+            $wpdb->prepare( "SELECT COUNT(*) {$base} AND o.raw_html NOT LIKE %s", 'external', 'a', '%nofollow%' )
+        ),
+        'missing_noopener_noreferrer' => (int) $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT COUNT(*) {$base} AND o.raw_html LIKE %s AND (o.raw_html NOT LIKE %s OR o.raw_html NOT LIKE %s)",
+                'external',
+                'a',
+                '%target="_blank"%',
+                '%noopener%',
+                '%noreferrer%'
+            )
+        ),
+        'http_not_https' => (int) $wpdb->get_var(
+            $wpdb->prepare( "SELECT COUNT(*) {$base} AND l.url LIKE %s", 'external', 'a', 'http://%' )
+        ),
+    );
+}
+
 /** Move a post's modification boundary beyond a completed content cursor. */
 function lha_integration_force_modified_after( int $post_id, string $cursor ): void {
     global $wpdb;
@@ -133,8 +185,31 @@ foreach ( array( 'links', 'occurrences', 'queue', 'logs', 'repairs' ) as $suffix
     lha_integration_assert( $found === $table, "Activation did not create {$table}." );
 }
 
+$queue_table = LHA_DB::table( 'queue' );
+$claim_index = $wpdb->get_results( "SHOW INDEX FROM {$queue_table} WHERE Key_name = 'claim_order'", ARRAY_A );
+usort(
+    $claim_index,
+    static fn( array $left, array $right ): int => (int) $left['Seq_in_index'] <=> (int) $right['Seq_in_index']
+);
+lha_integration_assert(
+    array( 'status', 'priority', 'created_at', 'id' ) === array_column( $claim_index, 'Column_name' ),
+    'The queue claim-order index is missing or has the wrong column order.'
+);
+
 $queue = new LHA_Queue();
 lha_integration_assert( $queue->clear(), 'Could not clear the integration queue.' );
+
+$queries_before_bulk_insert = $wpdb->num_queries;
+$bulk_inserted = $queue->add_many(
+    array(
+        array( 'object_type' => 'post', 'object_id' => 90001, 'priority' => 5 ),
+        array( 'object_type' => 'post', 'object_id' => 90002, 'priority' => 1 ),
+    ),
+    false
+);
+lha_integration_assert( 2 === $bulk_inserted, 'The queue multi-row insert did not report both rows.' );
+lha_integration_assert( 1 === $wpdb->num_queries - $queries_before_bulk_insert, 'The queue batch used more than one INSERT query.' );
+lha_integration_assert( $queue->clear(), 'Could not clear the queue after the multi-row insert test.' );
 
 $normal_id = $queue->add( 'post', 91001, 'https://example.test/normal', 5 );
 $urgent_id = $queue->add( 'post', 91002, 'https://example.test/urgent', 1 );
@@ -159,7 +234,6 @@ lha_integration_assert(
     'Queue workers did not receive isolated claim tokens.'
 );
 
-$queue_table = LHA_DB::table( 'queue' );
 lha_integration_assert( $queue->clear(), 'Could not clear the queue before retry tests.' );
 $retry_id = $queue->add( 'post', 92001, 'https://example.test/retry', 1 );
 lha_integration_assert( is_int( $retry_id ) && $retry_id > 0, 'Could not create the retry fixture.' );
@@ -170,7 +244,10 @@ for ( $attempt = 1; $attempt <= 3; $attempt++ ) {
     lha_integration_assert( $retry_id === (int) $retry_claim[0]['id'], "Retry attempt {$attempt} claimed the wrong item." );
     lha_integration_assert( '' !== $retry_claim[0]['claim_token'], "Retry attempt {$attempt} has no claim token." );
 
-    $queue->increment_attempts( $retry_id, "integration failure {$attempt}" );
+    lha_integration_assert(
+        $queue->increment_attempts( $retry_id, "integration failure {$attempt}", (string) $retry_claim[0]['claim_token'] ),
+        "Retry attempt {$attempt} was not recorded by its claiming worker."
+    );
     $retry_row = $wpdb->get_row(
         $wpdb->prepare( "SELECT * FROM {$queue_table} WHERE id = %d", $retry_id ),
         ARRAY_A
@@ -219,6 +296,22 @@ lha_integration_assert( $initial_claim_token === $fresh_row['claim_token'], 'Fre
 $reclaimed = $queue->get_pending( 1 );
 lha_integration_assert( 1 === count( $reclaimed ) && $stale_id === (int) $reclaimed[0]['id'], 'The stale item was not reclaimable.' );
 lha_integration_assert( $initial_claim_token !== $reclaimed[0]['claim_token'], 'The reclaimed item reused its stale claim token.' );
+lha_integration_assert(
+    ! $queue->update_status( $stale_id, 'done', $initial_claim_token ),
+    'A stale worker completed an item that another worker had reclaimed.'
+);
+lha_integration_assert(
+    ! $queue->increment_attempts( $stale_id, 'stale worker failure', $initial_claim_token ),
+    'A stale worker recorded a retry after another worker reclaimed the item.'
+);
+$reclaimed_row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$queue_table} WHERE id = %d", $stale_id ), ARRAY_A );
+lha_integration_assert( 'processing' === $reclaimed_row['status'], 'A stale worker changed the reclaimed item status.' );
+lha_integration_assert( $reclaimed[0]['claim_token'] === $reclaimed_row['claim_token'], 'A stale worker changed the current claim token.' );
+lha_integration_assert( 0 === (int) $reclaimed_row['attempts'], 'A stale worker incremented the current worker attempt count.' );
+lha_integration_assert(
+    $queue->update_status( $stale_id, 'done', (string) $reclaimed[0]['claim_token'] ),
+    'The worker holding the current claim could not complete its item.'
+);
 
 lha_integration_assert( $queue->clear(), 'Could not clear the queue before scanner failure tests.' );
 $preserved_url = 'mailto:preserved@example.test';
@@ -416,6 +509,14 @@ lha_integration_assert( is_array( $batch_link ), 'The background link result is 
 lha_integration_assert( 'broken' === $batch_link['status'], 'The deterministic 404 was not classified as broken.' );
 lha_integration_assert( 404 === (int) $batch_link['http_code'], 'The deterministic HTTP code was not stored.' );
 lha_integration_assert( 1 === (int) $batch_link['check_count'], 'The background link check count is incorrect.' );
+lha_integration_assert(
+    lha_integration_expected_link_stats() === LHA_DB::get_stats(),
+    'Aggregated dashboard statistics changed the established count semantics.'
+);
+lha_integration_assert(
+    lha_integration_expected_seo_counts() === ( new LHA_SEO_Checker() )->get_issue_counts(),
+    'Aggregated SEO statistics changed the established count semantics.'
+);
 
 $queue_counts = ( new LHA_Queue() )->get_counts();
 lha_integration_assert( 0 === $queue_counts['pending'], 'Completed scan left pending queue items.' );

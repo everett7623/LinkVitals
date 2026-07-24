@@ -26,6 +26,11 @@ class LHA_Queue {
     private const STUCK_THRESHOLD_MINUTES = 10;
 
     /**
+     * Maximum rows written by one queue INSERT statement.
+     */
+    private const INSERT_BATCH_SIZE = 100;
+
+    /**
      * Fully-qualified queue table name.
      */
     private string $table;
@@ -44,24 +49,27 @@ class LHA_Queue {
      * @param int    $object_id   WordPress object ID.
      * @param string $object_url  Permalink or URL of the object.
      * @param int    $priority    Priority 0-9, lower = higher priority.
+     * @param bool   $check_existing Whether to check for active duplicate work.
      * @return int|false Inserted/existing queue item ID, or false on failure.
      */
-    public function add( string $object_type, int $object_id, string $object_url = '', int $priority = 5 ): int|false {
+    public function add( string $object_type, int $object_id, string $object_url = '', int $priority = 5, bool $check_existing = true ): int|false {
         global $wpdb;
 
         $now = current_time( 'mysql' );
 
-        // Avoid duplicates: check for existing pending or processing item.
-        $existing = $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT id FROM {$this->table} WHERE object_type = %s AND object_id = %d AND status IN ('pending', 'processing')",
-                $object_type,
-                $object_id
-            )
-        );
+        if ( $check_existing ) {
+            // Avoid duplicates when adding work to an active queue.
+            $existing = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT id FROM {$this->table} WHERE object_type = %s AND object_id = %d AND status IN ('pending', 'processing')",
+                    $object_type,
+                    $object_id
+                )
+            );
 
-        if ( $existing ) {
-            return (int) $existing;
+            if ( $existing ) {
+                return (int) $existing;
+            }
         }
 
         $result = $wpdb->insert(
@@ -82,6 +90,79 @@ class LHA_Queue {
         );
 
         return $result ? (int) $wpdb->insert_id : false;
+    }
+
+    /**
+     * Add multiple queue items with bounded multi-row inserts.
+     *
+     * Duplicate-sensitive callers retain the existing per-item lookup. A full
+     * scan can skip it after clearing the queue and write each chunk at once.
+     *
+     * @param array $items Queue rows containing object_type and object_id.
+     * @param bool  $check_existing Whether to check for active duplicate work.
+     * @return int Number of items accepted or inserted.
+     */
+    public function add_many( array $items, bool $check_existing = true ): int {
+        global $wpdb;
+
+        $items = array_values( array_filter( $items, 'is_array' ) );
+        if ( empty( $items ) ) {
+            return 0;
+        }
+
+        if ( $check_existing ) {
+            $accepted = 0;
+            foreach ( $items as $item ) {
+                $result = $this->add(
+                    (string) ( $item['object_type'] ?? '' ),
+                    (int) ( $item['object_id'] ?? 0 ),
+                    (string) ( $item['object_url'] ?? '' ),
+                    (int) ( $item['priority'] ?? 5 )
+                );
+
+                if ( false !== $result ) {
+                    $accepted++;
+                }
+            }
+
+            return $accepted;
+        }
+
+        $inserted = 0;
+        $now      = current_time( 'mysql' );
+
+        foreach ( array_chunk( $items, self::INSERT_BATCH_SIZE ) as $chunk ) {
+            $placeholders = array();
+            $values       = array();
+
+            foreach ( $chunk as $item ) {
+                $placeholders[] = '(%s, %d, %s, %s, %d, %d, %s, %s, %s, %s)';
+                array_push(
+                    $values,
+                    (string) ( $item['object_type'] ?? '' ),
+                    (int) ( $item['object_id'] ?? 0 ),
+                    (string) ( $item['object_url'] ?? '' ),
+                    'pending',
+                    (int) ( $item['priority'] ?? 5 ),
+                    0,
+                    '',
+                    '',
+                    $now,
+                    $now
+                );
+            }
+
+            $query = "INSERT INTO {$this->table}
+                (object_type, object_id, object_url, status, priority, attempts, last_error, claim_token, created_at, updated_at)
+                VALUES " . implode( ', ', $placeholders );
+
+            $result = $wpdb->query( $wpdb->prepare( $query, ...$values ) );
+            if ( false !== $result ) {
+                $inserted += (int) $result;
+            }
+        }
+
+        return $inserted;
     }
 
     /**
@@ -135,23 +216,25 @@ class LHA_Queue {
     /**
      * Update the status of a queue item.
      *
-     * @param int    $id     Queue item ID.
-     * @param string $status New status (pending, processing, done, failed, paused).
+     * @param int    $id          Queue item ID.
+     * @param string $status      New status (pending, processing, done, failed, paused).
+     * @param string $claim_token Claim token returned when this item was claimed.
      * @return bool True on success, false on failure.
      */
-    public function update_status( int $id, string $status ): bool {
+    public function update_status( int $id, string $status, string $claim_token ): bool {
         global $wpdb;
 
-        return (bool) $wpdb->update(
-            $this->table,
-            array(
-                'status'      => $status,
-                'claim_token' => '',
-                'updated_at'  => current_time( 'mysql' ),
-            ),
-            array( 'id' => $id ),
-            array( '%s', '%s', '%s' ),
-            array( '%d' )
+        // A reclaimed item must only be completed by the worker that owns it.
+        return (bool) $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$this->table}
+                 SET status = %s, claim_token = '', updated_at = %s
+                 WHERE id = %d AND status = 'processing' AND claim_token = %s",
+                $status,
+                current_time( 'mysql' ),
+                $id,
+                $claim_token
+            )
         );
     }
 
@@ -161,59 +244,34 @@ class LHA_Queue {
      * If attempts reach MAX_ATTEMPTS (3), the item is permanently marked as 'failed'.
      * Otherwise, it is returned to 'pending' for retry.
      *
-     * @param int    $id    Queue item ID.
-     * @param string $error Error message to record.
-     * @return void
+     * @param int    $id          Queue item ID.
+     * @param string $error       Error message to record.
+     * @param string $claim_token Claim token returned when this item was claimed.
+     * @return bool True when this worker recorded the retry, false when it lost its claim.
      */
-    public function increment_attempts( int $id, string $error = '' ): void {
+    public function increment_attempts( int $id, string $error, string $claim_token ): bool {
         global $wpdb;
 
         $now = current_time( 'mysql' );
 
-        // Increment attempts and set error.
-        $wpdb->query(
+        // This fenced transition prevents a stale worker from overwriting a
+        // newer claim, and avoids a read/update race around the attempt limit.
+        return (bool) $wpdb->query(
             $wpdb->prepare(
-                "UPDATE {$this->table} SET attempts = attempts + 1, last_error = %s, updated_at = %s WHERE id = %d",
+                "UPDATE {$this->table}
+                 SET status = CASE WHEN attempts + 1 >= %d THEN 'failed' ELSE 'pending' END,
+                     attempts = attempts + 1,
+                     last_error = %s,
+                     claim_token = '',
+                     updated_at = %s
+                 WHERE id = %d AND status = 'processing' AND claim_token = %s",
+                self::MAX_ATTEMPTS,
                 $error,
                 $now,
-                $id
+                $id,
+                $claim_token
             )
         );
-
-        // Get current attempts count.
-        $attempts = (int) $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT attempts FROM {$this->table} WHERE id = %d",
-                $id
-            )
-        );
-
-        // Mark as failed if threshold reached, otherwise return to pending.
-        if ( $attempts >= self::MAX_ATTEMPTS ) {
-            $wpdb->update(
-                $this->table,
-                array(
-                    'status'      => 'failed',
-                    'claim_token' => '',
-                    'updated_at'  => $now,
-                ),
-                array( 'id' => $id ),
-                array( '%s', '%s', '%s' ),
-                array( '%d' )
-            );
-        } else {
-            $wpdb->update(
-                $this->table,
-                array(
-                    'status'      => 'pending',
-                    'claim_token' => '',
-                    'updated_at'  => $now,
-                ),
-                array( 'id' => $id ),
-                array( '%s', '%s', '%s' ),
-                array( '%d' )
-            );
-        }
     }
 
     /**
