@@ -605,9 +605,13 @@ def check_scan_recheck_and_incremental(reporter: Reporter) -> None:
     taxonomy_section = scanner_text[taxonomy_start:taxonomy_end]
     taxonomy_ok = all(
         (
-            "$this->queue->add(" in taxonomy_section,
+            "$this->queue->add_many( $items, $check_existing )" in taxonomy_section,
             "'taxonomy'" in taxonomy_section,
             "if ( $since )" not in taxonomy_section,
+            "'number'     => self::SOURCE_PAGE_SIZE" in taxonomy_section,
+            "'offset'     => $offset" in taxonomy_section,
+            "'orderby'    => 'term_id'" in taxonomy_section,
+            "count( $terms ) === self::SOURCE_PAGE_SIZE" in taxonomy_section,
         )
     )
     if taxonomy_ok:
@@ -666,7 +670,8 @@ def check_stale_occurrence_cleanup(reporter: Reporter) -> None:
             extract_position > empty_position,
             delete_position > extract_position,
             "private string $last_item_error = '';" in scanner_text,
-            "$this->queue->increment_attempts( (int) $item['id'], $this->last_item_error )" in scanner_text,
+            "$this->queue->increment_attempts( (int) $item['id'], $this->last_item_error, $claim_token )"
+            in scanner_text,
         )
     )
 
@@ -674,6 +679,123 @@ def check_stale_occurrence_cleanup(reporter: Reporter) -> None:
         reporter.ok("Scans clean stale sources while preserving prior occurrences on extraction failure.")
     else:
         reporter.fail("Scans must clean stale sources without deleting prior occurrences before extraction succeeds.")
+
+
+def check_queue_claim_fencing(reporter: Reporter) -> None:
+    queue_text = read_text(PLUGIN / "includes" / "class-lha-queue.php")
+    scanner_text = read_text(PLUGIN / "includes" / "class-lha-scanner.php")
+    integration_text = read_text(INTEGRATION_TEST)
+
+    fencing_ok = all(
+        (
+            "public function update_status( int $id, string $status, string $claim_token ): bool"
+            in queue_text,
+            "public function increment_attempts( int $id, string $error, string $claim_token ): bool"
+            in queue_text,
+            queue_text.count("WHERE id = %d AND status = 'processing' AND claim_token = %s") == 2,
+            "SET status = CASE WHEN attempts + 1 >= %d THEN 'failed' ELSE 'pending' END," in queue_text,
+            "SELECT attempts FROM {$this->table}" not in queue_text,
+            "$this->queue->update_status( (int) $item['id'], 'done', $claim_token )" in scanner_text,
+            "$this->queue->increment_attempts( (int) $item['id'], $this->last_item_error, $claim_token )"
+            in scanner_text,
+            "A stale worker completed an item that another worker had reclaimed." in integration_text,
+            "A stale worker recorded a retry after another worker reclaimed the item." in integration_text,
+            "The worker holding the current claim could not complete its item." in integration_text,
+        )
+    )
+
+    if fencing_ok:
+        reporter.ok("Queue completion and retry transitions are fenced by the active claim token.")
+    else:
+        reporter.fail("Queue state transitions must reject workers that no longer own the active claim.")
+
+
+def check_aggregate_statistics(reporter: Reporter) -> None:
+    db_text = read_text(PLUGIN / "includes" / "class-lha-db.php")
+    seo_text = read_text(PLUGIN / "includes" / "class-lha-seo-checker.php")
+    integration_text = read_text(INTEGRATION_TEST)
+
+    stats_start = db_text.find("public static function get_stats()")
+    stats_end = db_text.find("public static function get_issue_total_from_stats(", stats_start)
+    stats_section = db_text[stats_start:stats_end]
+    seo_start = seo_text.find("public function get_issue_counts()")
+    seo_end = seo_text.find("public function get_report(", seo_start)
+    seo_section = seo_text[seo_start:seo_end]
+
+    aggregate_ok = all(
+        (
+            stats_section.count("$wpdb->get_row(") == 1,
+            "$wpdb->get_var(" not in stats_section,
+            stats_section.count("COALESCE(SUM(CASE WHEN") == 12,
+            seo_section.count("$wpdb->get_row(") == 1,
+            "$wpdb->get_var(" not in seo_section,
+            "AS missing_nofollow" in seo_section,
+            "AS missing_noopener_noreferrer" in seo_section,
+            "AS http_not_https" in seo_section,
+            "Aggregated dashboard statistics changed the established count semantics." in integration_text,
+            "Aggregated SEO statistics changed the established count semantics." in integration_text,
+        )
+    )
+
+    if aggregate_ok:
+        reporter.ok("Dashboard and SEO summaries each use one verified aggregate query.")
+    else:
+        reporter.fail("Dashboard and SEO summaries must retain one aggregate query with verified count semantics.")
+
+
+def check_queue_population_performance(reporter: Reporter) -> None:
+    db_text = read_text(PLUGIN / "includes" / "class-lha-db.php")
+    queue_text = read_text(PLUGIN / "includes" / "class-lha-queue.php")
+    scanner_text = read_text(PLUGIN / "includes" / "class-lha-scanner.php")
+    integration_text = read_text(INTEGRATION_TEST)
+
+    posts_start = scanner_text.find("private function queue_posts(")
+    posts_end = scanner_text.find("private function queue_nav_menus(", posts_start)
+    posts_section = scanner_text[posts_start:posts_end]
+    menus_start = posts_end
+    menus_end = scanner_text.find("private function queue_taxonomies(", menus_start)
+    menus_section = scanner_text[menus_start:menus_end]
+    terms_start = scanner_text.find("private function queue_taxonomies(")
+    terms_end = scanner_text.find("* Pause scanning.", terms_start)
+    terms_section = scanner_text[terms_start:terms_end]
+
+    population_ok = all(
+        (
+            "KEY claim_order (status, priority, created_at, id)" in db_text,
+            "bool $check_existing = true" in queue_text,
+            "if ( $check_existing )" in queue_text,
+            "private const INSERT_BATCH_SIZE = 100" in queue_text,
+            "public function add_many( array $items, bool $check_existing = true ): int" in queue_text,
+            "array_chunk( $items, self::INSERT_BATCH_SIZE )" in queue_text,
+            "INSERT INTO {$this->table}" in queue_text,
+            "$this->queue_posts( $post_type, null, false )" in scanner_text,
+            "$this->queue_nav_menus( null, false )" in scanner_text,
+            "$this->queue_taxonomies( null, false )" in scanner_text,
+            "'no_found_rows'  => true" in posts_section,
+            "'update_post_meta_cache' => false" in posts_section,
+            "'update_post_term_cache' => false" in posts_section,
+            "get_permalink(" not in posts_section,
+            "$menu_items = wp_get_nav_menu_items(" in menus_section,
+            "$queue_items[] = array(" in menus_section,
+            "$this->queue->add_many( $queue_items, $check_existing )" in menus_section,
+            "get_term_link(" not in terms_section,
+            "private const SOURCE_PAGE_SIZE = 100" in scanner_text,
+            "'number'     => self::SOURCE_PAGE_SIZE" in terms_section,
+            "'offset'     => $offset" in terms_section,
+            "'orderby'    => 'term_id'" in terms_section,
+            "'update_term_meta_cache' => false" in terms_section,
+            "count( $terms ) === self::SOURCE_PAGE_SIZE" in terms_section,
+            "count( $post_ids ) === $args['posts_per_page']" in posts_section,
+            scanner_text.count("$this->queue->add_many(") >= 3,
+            "The queue claim-order index is missing or has the wrong column order." in integration_text,
+            "The queue batch used more than one INSERT query." in integration_text,
+        )
+    )
+
+    if population_ok:
+        reporter.ok("Full-scan queue population uses bounded inserts, avoids redundant lookups, and has a claim-order index.")
+    else:
+        reporter.fail("Full-scan queue population must stay lookup-light and retain its claim-order index.")
 
 
 def check_notifications_and_uninstall(reporter: Reporter) -> None:
@@ -776,6 +898,12 @@ def check_ci_workflow(reporter: Reporter) -> None:
             "$queue->reset_stuck( 10 )" in integration_text,
             "Fresh processing work was reset as stuck." in integration_text,
             "The reclaimed item reused its stale claim token." in integration_text,
+            "A stale worker completed an item that another worker had reclaimed." in integration_text,
+            "A stale worker recorded a retry after another worker reclaimed the item." in integration_text,
+            "Aggregated dashboard statistics changed the established count semantics." in integration_text,
+            "Aggregated SEO statistics changed the established count semantics." in integration_text,
+            "The queue claim-order index is missing or has the wrong column order." in integration_text,
+            "The queue batch used more than one INSERT query." in integration_text,
             "new LHA_Integration_Failing_Extractor()" in integration_text,
             "The mixed scanner batch did not process both items." in integration_text,
             "Extraction failure discarded the last known-good occurrence." in integration_text,
@@ -937,6 +1065,9 @@ def main() -> int:
     check_documented_invariants(reporter)
     check_scan_recheck_and_incremental(reporter)
     check_stale_occurrence_cleanup(reporter)
+    check_queue_claim_fencing(reporter)
+    check_aggregate_statistics(reporter)
+    check_queue_population_performance(reporter)
     check_notifications_and_uninstall(reporter)
     check_ci_workflow(reporter)
     check_release_zip(reporter, version)

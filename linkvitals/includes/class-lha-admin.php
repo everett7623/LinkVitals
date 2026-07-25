@@ -921,9 +921,18 @@ class LHA_Admin {
      */
     public function render_seo(): void {
         $seo_checker = new LHA_SEO_Checker();
+        $issue_labels = array(
+            'missing_nofollow'            => __( 'Missing nofollow', 'linkvitals' ),
+            'missing_noopener_noreferrer' => __( 'Missing noopener/noreferrer', 'linkvitals' ),
+            'http_not_https'              => __( 'HTTP links', 'linkvitals' ),
+        );
         $page = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
-        $per_page = 20;
-        $issue_filter = isset( $_GET['issue'] ) ? sanitize_key( $_GET['issue'] ) : '';
+        $per_page     = 20;
+        $issue_filter = isset( $_GET['issue'] ) ? sanitize_key( wp_unslash( $_GET['issue'] ) ) : '';
+
+        if ( ! isset( $issue_labels[ $issue_filter ] ) ) {
+            $issue_filter = '';
+        }
 
         $counts = $seo_checker->get_issue_counts();
         $report = $seo_checker->get_report( $per_page, ( $page - 1 ) * $per_page, $issue_filter );
@@ -995,7 +1004,9 @@ class LHA_Admin {
                             <td><?php echo ! $item['is_http'] ? '<span class="dashicons dashicons-yes-alt" style="color:#00a32a;"></span>' : '<span class="dashicons dashicons-dismiss" style="color:#d63638;"></span>'; ?></td>
                             <td>
                                 <?php foreach ( $item['issues'] as $issue ) : ?>
-                                    <span class="lha-badge lha-badge-warning"><?php echo esc_html( str_replace( '_', ' ', $issue ) ); ?></span>
+                                    <?php if ( isset( $issue_labels[ $issue ] ) ) : ?>
+                                        <span class="lha-badge lha-badge-warning"><?php echo esc_html( $issue_labels[ $issue ] ); ?></span>
+                                    <?php endif; ?>
                                 <?php endforeach; ?>
                                 <?php if ( empty( $item['issues'] ) ) : ?>
                                     <span class="lha-badge lha-badge-ok"><?php esc_html_e( 'OK', 'linkvitals' ); ?></span>

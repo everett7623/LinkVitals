@@ -20,6 +20,7 @@ class LHA_Scanner {
 
     private const CONTENT_SCAN_TYPES = array( 'full', 'incremental' );
     private const DEFAULT_SCAN_CURSOR = '2000-01-01 00:00:00';
+    private const SOURCE_PAGE_SIZE = 100;
 
     private LHA_Queue $queue;
     private LHA_Link_Extractor $extractor;
@@ -52,14 +53,14 @@ class LHA_Scanner {
         $post_types = $this->get_scannable_post_types();
         $this->cleanup_stale_sources( $post_types );
         foreach ( $post_types as $post_type ) {
-            $total_queued += $this->queue_posts( $post_type );
+            $total_queued += $this->queue_posts( $post_type, null, false );
         }
 
         // Queue nav menu custom link items (Req 5.2).
-        $total_queued += $this->queue_nav_menus();
+        $total_queued += $this->queue_nav_menus( null, false );
 
         // Queue taxonomy terms with non-empty descriptions (Req 5.3).
-        $total_queued += $this->queue_taxonomies();
+        $total_queued += $this->queue_taxonomies( null, false );
 
         self::record_scan_start( 'full', $started_at );
 
@@ -177,12 +178,17 @@ class LHA_Scanner {
         // Step 4: Process each queue item.
         $processed = 0;
         foreach ( $items as $item ) {
+            $claim_token = (string) ( $item['claim_token'] ?? '' );
+            if ( '' === $claim_token ) {
+                continue;
+            }
+
             $success = $this->process_queue_item( $item );
 
             if ( $success ) {
-                $this->queue->update_status( (int) $item['id'], 'done' );
+                $this->queue->update_status( (int) $item['id'], 'done', $claim_token );
             } else {
-                $this->queue->increment_attempts( (int) $item['id'], $this->last_item_error );
+                $this->queue->increment_attempts( (int) $item['id'], $this->last_item_error, $claim_token );
             }
 
             $processed++;
@@ -578,18 +584,21 @@ class LHA_Scanner {
      *
      * @param string      $post_type Post type name.
      * @param string|null $since     Only queue posts modified after this datetime.
+     * @param bool        $check_existing Whether to check for active duplicate work.
      * @return int Number of items queued.
      */
-    private function queue_posts( string $post_type, ?string $since = null ): int {
+    private function queue_posts( string $post_type, ?string $since = null, bool $check_existing = true ): int {
         $count = 0;
 
         $args = array(
             'post_type'      => $post_type,
             'post_status'    => 'publish',
-            'posts_per_page' => 100,
+            'posts_per_page' => self::SOURCE_PAGE_SIZE,
             'paged'          => 1,
             'fields'         => 'ids',
-            'no_found_rows'  => false,
+            'no_found_rows'  => true,
+            'update_post_meta_cache' => false,
+            'update_post_term_cache' => false,
         );
 
         if ( $since ) {
@@ -605,14 +614,18 @@ class LHA_Scanner {
         do {
             $query    = new WP_Query( $args );
             $post_ids = $query->posts;
+            $items    = array();
 
             foreach ( $post_ids as $post_id ) {
-                $this->queue->add( $post_type, (int) $post_id, get_permalink( $post_id ) ?: '' );
-                $count++;
+                $items[] = array(
+                    'object_type' => $post_type,
+                    'object_id'   => (int) $post_id,
+                );
             }
+            $count += $this->queue->add_many( $items, $check_existing );
 
             $args['paged']++;
-        } while ( $args['paged'] <= $query->max_num_pages );
+        } while ( count( $post_ids ) === $args['posts_per_page'] );
 
         wp_reset_postdata();
 
@@ -625,29 +638,32 @@ class LHA_Scanner {
      * Only queues custom links (not post/page references) per Req 5.2.
      *
      * @param string|null $since Only queue items modified after this datetime.
+     * @param bool        $check_existing Whether to check for active duplicate work.
      * @return int Number of items queued.
      */
-    private function queue_nav_menus( ?string $since = null ): int {
-        $count = 0;
+    private function queue_nav_menus( ?string $since = null, bool $check_existing = true ): int {
+        $queue_items = array();
 
         $menus = wp_get_nav_menus();
         foreach ( $menus as $menu ) {
-            $items = wp_get_nav_menu_items( $menu->term_id );
-            if ( $items ) {
-                foreach ( $items as $item ) {
+            $menu_items = wp_get_nav_menu_items( $menu->term_id );
+            if ( $menu_items ) {
+                foreach ( $menu_items as $item ) {
                     if ( $item->type === 'custom' ) {
                         // For incremental: skip items not modified after $since.
                         if ( $since && strtotime( $item->post_modified ) <= strtotime( $since ) ) {
                             continue;
                         }
-                        $this->queue->add( 'nav_menu_item', (int) $item->ID, '' );
-                        $count++;
+                        $queue_items[] = array(
+                            'object_type' => 'nav_menu_item',
+                            'object_id'   => (int) $item->ID,
+                        );
                     }
                 }
             }
         }
 
-        return $count;
+        return $this->queue->add_many( $queue_items, $check_existing );
     }
 
     /**
@@ -656,40 +672,52 @@ class LHA_Scanner {
      * Scans all public taxonomies per Req 5.3.
      *
      * @param string|null $since Only queue terms (not directly filterable by modification date).
+     * @param bool        $check_existing Whether to check for active duplicate work.
      * @return int Number of items queued.
      */
-    private function queue_taxonomies( ?string $since = null ): int {
+    private function queue_taxonomies( ?string $since = null, bool $check_existing = true ): int {
         $count = 0;
 
         $taxonomies = get_taxonomies( array( 'public' => true ), 'names' );
 
         foreach ( $taxonomies as $taxonomy ) {
-            $terms = get_terms( array(
-                'taxonomy'   => $taxonomy,
-                'hide_empty' => false,
-                'fields'     => 'all',
-            ) );
+            $offset = 0;
 
-            if ( is_wp_error( $terms ) ) {
-                continue;
-            }
+            do {
+                $terms = get_terms( array(
+                    'taxonomy'   => $taxonomy,
+                    'hide_empty' => false,
+                    'fields'     => 'all',
+                    'number'     => self::SOURCE_PAGE_SIZE,
+                    'offset'     => $offset,
+                    'orderby'    => 'term_id',
+                    'order'      => 'ASC',
+                    'update_term_meta_cache' => false,
+                ) );
 
-            foreach ( $terms as $term ) {
-                if ( '' === trim( (string) $term->description ) ) {
-                    continue;
+                if ( is_wp_error( $terms ) ) {
+                    break;
                 }
 
-                // Terms have no reliable modification timestamp, so incremental
-                // scans conservatively re-process every non-empty description.
+                $items = array();
 
-                $term_link = get_term_link( $term );
-                $this->queue->add(
-                    'taxonomy',
-                    (int) $term->term_id,
-                    is_wp_error( $term_link ) ? '' : $term_link
-                );
-                $count++;
-            }
+                foreach ( $terms as $term ) {
+                    if ( '' === trim( (string) $term->description ) ) {
+                        continue;
+                    }
+
+                    // Terms have no reliable modification timestamp, so incremental
+                    // scans conservatively re-process every non-empty description.
+
+                    $items[] = array(
+                        'object_type' => 'taxonomy',
+                        'object_id'   => (int) $term->term_id,
+                    );
+                }
+
+                $count += $this->queue->add_many( $items, $check_existing );
+                $offset += self::SOURCE_PAGE_SIZE;
+            } while ( count( $terms ) === self::SOURCE_PAGE_SIZE );
         }
 
         return $count;
