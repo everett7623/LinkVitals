@@ -37,19 +37,63 @@ The upload archive must contain one top-level `linkvitals/` directory with
 
 ## Development
 
-The repository root contains development, test, translation, and packaging
-tools. The installable plugin source is under [`linkvitals/`](linkvitals/).
+### Quick Start
 
-```shell
+```bash
+# Verify code quality (run before committing)
 python tools/dev-verify.py
+
+# Run contract tests
 php tests/run.php
+
+# Sync and compile translations
 python tools/i18n-sync.py
 python generate-mo.py
+
+# Build release package
 python tools/package-release.py
 ```
 
-`python tools/dev-verify.py` also runs PHP syntax checks and the dependency-free
-contract suite when PHP is available.
+### Repository Structure
+
+The repository root contains development, test, translation, and packaging
+tools. The installable plugin source is under [`linkvitals/`](linkvitals/).
+
+```
+LinkVitals/
+├── linkvitals/              # Installable WordPress plugin
+│   ├── linkvitals.php       # Main plugin file
+│   ├── includes/            # LHA_* classes
+│   ├── assets/              # Admin CSS/JS
+│   └── languages/           # Translation files
+├── tools/                   # Development scripts
+│   ├── dev-verify.py        # Code quality checker
+│   ├── i18n-sync.py         # Translation sync
+│   └── package-release.py   # Release builder
+├── tests/                   # Test suites
+│   ├── run.php              # Contract tests
+│   └── integration/         # WordPress integration tests
+├── AGENTS.md                # Complete development guide
+├── CLAUDE.md                # Quick reference
+└── linkvitals.zip           # Release artifact
+```
+
+### Documentation
+
+- **[AGENTS.md](AGENTS.md)** - Complete development guide for AI coding assistants
+- **[CLAUDE.md](CLAUDE.md)** - Quick reference and command cheat sheet
+
+### Version Management
+
+When updating source code, synchronize version numbers in all 5 locations:
+
+1. `linkvitals/linkvitals.php` - `Version:` header
+2. `linkvitals/linkvitals.php` - `LHA_VERSION` constant
+3. `linkvitals/readme.txt` - `Stable tag`
+4. `linkvitals/readme.txt` - Top `Changelog` entry
+5. `linkvitals/readme.txt` - Top `Upgrade Notice` entry
+
+Run `python tools/dev-verify.py` to verify version consistency.
 
 ## Compatibility
 

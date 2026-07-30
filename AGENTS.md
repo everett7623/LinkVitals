@@ -1,10 +1,8 @@
 # AGENTS.md
 
-Codex development guide for the LinkVitals repository.
+AI Coding Assistant Development Guide for the LinkVitals repository.
 
-This file is the handoff document for future Codex work. The old specification
-directory has been removed, so keep this file current whenever architecture,
-workflows, settings, or release steps change.
+This file is the comprehensive reference for AI coding assistants (Claude Code, Cursor, GitHub Copilot, Codex, etc.) working with this codebase. Keep this file current whenever architecture, workflows, settings, or release steps change.
 
 ## Repository Layout
 
