@@ -1,5 +1,10 @@
 # LinkVitals
 
+[![CI](https://github.com/everett7623/LinkVitals/actions/workflows/ci.yml/badge.svg)](https://github.com/everett7623/LinkVitals/actions/workflows/ci.yml)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/gpl-2.0)
+[![WordPress](https://img.shields.io/badge/WordPress-6.4%2B-blue.svg)](https://wordpress.org/)
+[![PHP](https://img.shields.io/badge/PHP-8.0%2B-purple.svg)](https://www.php.net/)
+
 LinkVitals is a privacy-friendly WordPress link health and SEO auditor. It
 scans site content for broken links, redirects, timeouts, SSL and DNS errors,
 orphaned pages, invalid anchors, and external-link SEO risks without adding a

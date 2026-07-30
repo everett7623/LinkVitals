@@ -18,6 +18,15 @@ This file provides guidance to AI coding assistants (Claude Code, Cursor, GitHub
 # 验证代码质量（提交前必须运行）
 python tools/dev-verify.py
 
+# 快速检查版本一致性
+python tools/check-version.py
+
+# 查看项目统计
+python tools/stats.py
+
+# 清理临时文件（预览）
+python tools/clean.py
+
 # 编译翻译文件（修改翻译后运行）
 python generate-mo.py
 
