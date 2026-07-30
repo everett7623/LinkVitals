@@ -95,6 +95,16 @@ When updating source code, synchronize version numbers in all 5 locations:
 
 Run `python tools/dev-verify.py` to verify version consistency.
 
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+
+Quick contribution checklist:
+- Follow WordPress coding standards
+- Add tests for new features
+- Update translations if needed
+- Run `python tools/dev-verify.py` before submitting
+
 ## Compatibility
 
 The LinkVitals distribution uses the `linkvitals` plugin slug and text domain.
