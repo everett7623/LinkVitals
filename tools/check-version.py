@@ -49,6 +49,16 @@ def main() -> int:
         "Stable Tag": extract_version(
             r"^Stable tag:\s*([^\s]+)", readme_text, "Stable tag"
         ),
+        "Changelog": extract_version(
+            r"^=+\s*([0-9][^=\s]*)\s*=+\s*$",
+            readme_text,
+            "top changelog entry",
+        ),
+        "Upgrade Notice": extract_version(
+            r"== Upgrade Notice ==\s*\n\s*\n=+\s*([0-9][^=\s]*)\s*=+",
+            readme_text,
+            "top upgrade notice entry",
+        ),
     }
 
     if None in versions.values():
@@ -64,6 +74,8 @@ def main() -> int:
         print(f"  - Plugin Header: {versions['Plugin Header']}")
         print(f"  - LHA_VERSION:   {versions['LHA_VERSION']}")
         print(f"  - Stable Tag:    {versions['Stable Tag']}")
+        print(f"  - Changelog:     {versions['Changelog']}")
+        print(f"  - Upgrade Notice: {versions['Upgrade Notice']}")
         return 0
     else:
         print("[FAIL] 版本号不一致！")

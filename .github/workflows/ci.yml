@@ -195,4 +195,4 @@ jobs:
       - name: Build and verify release package
         run: |
           python tools/package-release.py
-          python tools/dev-verify.py
+          python tools/dev-verify.py --require-release-zip

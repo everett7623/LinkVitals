@@ -8,6 +8,7 @@ install. When PHP is available it also runs `php -l` over plugin PHP files.
 
 from __future__ import annotations
 
+import argparse
 import re
 import shutil
 import subprocess
@@ -483,14 +484,22 @@ def check_language_settings(reporter: Reporter) -> None:
     reporter.ok("Language defaults to auto, follows the WordPress site locale, and preserves zh_CN values.")
 
 
-def check_release_zip(reporter: Reporter, version: str | None) -> None:
+def check_release_zip(
+    reporter: Reporter,
+    version: str | None,
+    require_release_zip: bool = False,
+) -> None:
     if not version:
         reporter.warn("Could not determine version; skipped release zip freshness check.")
         return
 
     zip_path = ROOT / "linkvitals.zip"
     if not zip_path.exists():
-        reporter.fail(f"Release zip missing: {zip_path.name}")
+        message = f"Release zip missing: {zip_path.name}"
+        if require_release_zip:
+            reporter.fail(message)
+        else:
+            reporter.warn(message + "; skipped release package checks.")
         return
 
     versioned_root_zips = sorted(ROOT.glob("linkvitals-[0-9]*.zip"))
@@ -1043,7 +1052,18 @@ def run_optional_php_tests(reporter: Reporter) -> None:
         reporter.ok(f"PHP contract tests passed ({summary})")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run lightweight LinkVitals verification.")
+    parser.add_argument(
+        "--require-release-zip",
+        action="store_true",
+        help="Fail when the freshly built root linkvitals.zip is missing.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
     reporter = Reporter()
     main_text = read_text(MAIN)
     version = require_match(
@@ -1070,7 +1090,7 @@ def main() -> int:
     check_queue_population_performance(reporter)
     check_notifications_and_uninstall(reporter)
     check_ci_workflow(reporter)
-    check_release_zip(reporter, version)
+    check_release_zip(reporter, version, args.require_release_zip)
     run_optional_php_lint(reporter)
     run_optional_php_tests(reporter)
 

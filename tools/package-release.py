@@ -162,7 +162,11 @@ def build_zip(output: Path) -> None:
         if temp_path.exists():
             temp_path.unlink()
 
-    print(f"Built {output.relative_to(ROOT)} with {len(files)} file(s).")
+    try:
+        display_output = output.relative_to(ROOT)
+    except ValueError:
+        display_output = output
+    print(f"Built {display_output} with {len(files)} file(s).")
 
 
 def parse_args() -> argparse.Namespace:

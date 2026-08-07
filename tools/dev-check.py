@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -67,7 +66,7 @@ def main() -> int:
     print("-" * 60)
 
     tools = [
-        ("python", "--version", "Python"),
+        (sys.executable, "--version", "Python"),
         ("php", "--version", "PHP"),
         ("git", "--version", "Git"),
     ]

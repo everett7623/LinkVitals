@@ -134,7 +134,7 @@ python tools/package-release.py
 ### 3. 验证发布包
 
 ```bash
-python tools/dev-verify.py
+python tools/dev-verify.py --require-release-zip
 ```
 
 ### 4. 创建 Git Tag

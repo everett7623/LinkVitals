@@ -126,12 +126,6 @@ Link checking runs from the WordPress server. LinkVitals does not add
 front-end tracking. Optional AI requests occur only when an administrator
 configures a provider key and invokes the related feature.
 
-## Contributing
-
-Issues and pull requests are welcome at
-[`everett7623/LinkVitals`](https://github.com/everett7623/LinkVitals).
-Please run `python tools/dev-verify.py` before submitting changes.
-
 ## License
 
 LinkVitals is licensed under the GNU General Public License v2.0 or later. See

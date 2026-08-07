@@ -19,9 +19,9 @@ assignees: ''
 
 ## 环境信息
 
-- **WordPress 版本**: 
-- **PHP 版本**: 
-- **LinkVitals 版本**: 
+- **WordPress 版本**:
+- **PHP 版本**:
+- **LinkVitals 版本**:
 
 ## 其他上下文
 

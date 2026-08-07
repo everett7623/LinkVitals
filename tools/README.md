@@ -18,10 +18,16 @@ python tools/dev-verify.py
 - 版本号一致性
 - PHP 语法（如果 PHP 可用）
 - 翻译完整性
-- 发布包验证
+- 发布包验证（存在 `linkvitals.zip` 时）
 - 依赖关系检查
 
 **使用场景:** 提交代码前必须运行
+
+发布前要求发布包存在时，使用：
+
+```bash
+python tools/dev-verify.py --require-release-zip
+```
 
 ---
 
@@ -36,6 +42,8 @@ python tools/check-version.py
 - `linkvitals.php` - Version 头部
 - `linkvitals.php` - LHA_VERSION 常量
 - `readme.txt` - Stable tag
+- `readme.txt` - Changelog 顶部条目
+- `readme.txt` - Upgrade Notice 顶部条目
 
 **使用场景:** 更新版本号后快速验证
 
@@ -91,7 +99,7 @@ python tools/stats.py
 
 **统计内容:**
 - 代码行数（PHP, JS, CSS）
-- 测试覆盖
+- 测试文件和行数
 - 文档数量
 - 工具脚本数量
 
@@ -130,7 +138,7 @@ python tools/package-release.py
 python tools/package-release.py --output /path/to/output.zip
 
 # 允许版本化文件名（仅用于归档）
-python tools/package-release.py --allow-versioned-filename
+python tools/package-release.py --output /path/to/linkvitals-1.2.3.zip --allow-versioned-filename
 ```
 
 **功能:**
@@ -174,7 +182,7 @@ python tools/check-version.py
 python tools/package-release.py
 
 # 最终验证
-python tools/dev-verify.py
+python tools/dev-verify.py --require-release-zip
 ```
 
 ---

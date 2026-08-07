@@ -12,9 +12,9 @@
 - **版本**: 0.3.30
 - **代码行数**: 11,642 行（PHP: 10,282 | JS: 1,019 | CSS: 341）
 - **测试行数**: 2,759 行
-- **文档行数**: 1,329 行
+- **文档行数**: 运行 `python tools/stats.py` 查看当前统计
 - **开发工具**: 7 个 Python 脚本
-- **测试覆盖**: 43 个合约测试，100% 通过率
+- **测试结果**: 运行 `php tests/run.php` 查看当前结果
 
 ## 🎯 核心功能
 
@@ -184,7 +184,7 @@ python tools/check-version.py
 python tools/package-release.py
 
 # 最终验证
-python tools/dev-verify.py
+python tools/dev-verify.py --require-release-zip
 
 # 提交和标签
 git commit -am "chore: bump version to 0.x.x"
@@ -211,7 +211,7 @@ git push origin main --tags
 
 ### 自动化验证
 - PHP 8.0/8.3 语法检查
-- WordPress 编码标准
+- WordPress 约定的静态契约检查
 - 翻译字符串覆盖
 - 发布包结构验证
 
