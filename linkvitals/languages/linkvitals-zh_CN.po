@@ -2,7 +2,7 @@
 # This file is distributed under the same license as the LinkVitals package.
 msgid ""
 msgstr ""
-"Project-Id-Version: LinkVitals 0.3.30\n"
+"Project-Id-Version: LinkVitals 0.3.35\n"
 "POT-Creation-Date: 2026-07-15 00:00+0000\n"
 "PO-Revision-Date: 2026-07-15 00:00+0000\n"
 "Language: zh_CN\n"
@@ -1056,3 +1056,28 @@ msgstr "上次扫描完成："
 
 msgid "Last Scan Started:"
 msgstr "上次扫描开始："
+
+# Source strings synced by tools/i18n-sync.py
+
+msgid "Failed to record repair history for post #%d."
+msgstr "无法记录文章 #%d 的修复历史。"
+
+msgid "No matching anchor was found in editable post content."
+msgstr "未在可编辑的文章内容中找到匹配的链接。"
+
+msgid "No matching post content was changed."
+msgstr "未修改任何匹配的文章内容。"
+
+# Source strings synced by tools/i18n-sync.py
+
+msgid "Failed to queue a scan refresh for post #%d."
+msgstr "无法将文章 #%d 加入扫描刷新队列。"
+
+msgid "Post #%d no longer matches the scanned source type."
+msgstr "文章 #%d 的当前类型与扫描时的来源类型不再匹配。"
+
+msgid "Repair rolled back, but its scan refresh could not be queued."
+msgstr "修复已回滚，但无法将其扫描刷新加入队列。"
+
+msgid "The repair source no longer matches the current post type."
+msgstr "修复记录的来源类型与当前文章类型不再匹配。"

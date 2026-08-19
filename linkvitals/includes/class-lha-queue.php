@@ -93,6 +93,33 @@ class LHA_Queue {
     }
 
     /**
+     * Queue a post-edit refresh that must run after any already-claimed work.
+     *
+     * A pending item has not read the source yet and can safely cover the edit.
+     * A processing item may already hold pre-edit content, so it must not
+     * suppress a new pending refresh.
+     *
+     * @return int|false Pending queue item ID, or false on failure.
+     */
+    public function add_refresh( string $object_type, int $object_id, string $object_url = '', int $priority = 1 ): int|false {
+        global $wpdb;
+
+        $pending = $wpdb->get_var(
+            $wpdb->prepare(
+                "SELECT id FROM {$this->table} WHERE object_type = %s AND object_id = %d AND status = 'pending' LIMIT 1",
+                $object_type,
+                $object_id
+            )
+        );
+
+        if ( $pending ) {
+            return (int) $pending;
+        }
+
+        return $this->add( $object_type, $object_id, $object_url, $priority, false );
+    }
+
+    /**
      * Add multiple queue items with bounded multi-row inserts.
      *
      * Duplicate-sensitive callers retain the existing per-item lookup. A full

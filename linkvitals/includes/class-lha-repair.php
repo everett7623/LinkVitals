@@ -101,11 +101,37 @@ class LHA_Repair {
         return current_user_can( 'edit_post', $post->ID );
     }
 
+    /** Confirm that a stored occurrence still points at the same post type. */
+    private function post_matches_object_type( WP_Post $post, string $object_type ): bool {
+        return (string) $post->post_type === $object_type;
+    }
+
     /**
      * Build a consistent post edit permission error.
      */
     private function get_edit_permission_message( WP_Post $post ): string {
         return sprintf( __( 'You do not have permission to edit post #%d.', 'linkvitals' ), $post->ID );
+    }
+
+    /**
+     * Replace an exact URL token without matching a longer URL that shares its prefix.
+     */
+    private function replace_bounded_url( string $content, string $old_url, string $new_url, int &$count ): string {
+        if ( '' === $old_url || $old_url === $new_url ) {
+            return $content;
+        }
+
+        $pattern = "~(^|[\\s\"'<>=()\\[\\]{}])" . preg_quote( $old_url, '~' ) . "(?=$|[\\s\"'<>()\\[\\]{}])~u";
+        $updated = preg_replace_callback(
+            $pattern,
+            static function( array $matches ) use ( $new_url, &$count ): string {
+                $count++;
+                return $matches[1] . $new_url;
+            },
+            $content
+        );
+
+        return is_string( $updated ) ? $updated : $content;
     }
 
     /**
@@ -117,7 +143,8 @@ class LHA_Repair {
         $count = 0;
         $new_content = $content;
 
-        // Fast-path direct replacements to cover plain text and common encoded forms.
+        // Replace exact tokens in text and block metadata without changing
+        // longer URLs that merely share the same prefix.
         $old_variants = array_unique( array_filter( array(
             $old_url,
             untrailingslashit( $old_url ),
@@ -127,8 +154,10 @@ class LHA_Repair {
         ) ) );
 
         foreach ( $old_variants as $variant ) {
-            $new_content = str_replace( $variant, $new_url, $new_content, $direct_count );
-            $count += (int) $direct_count;
+            $replacement_url = str_contains( $variant, '&amp;' )
+                ? str_replace( '&', '&amp;', $new_url )
+                : $new_url;
+            $new_content = $this->replace_bounded_url( $new_content, $variant, $replacement_url, $count );
         }
 
         // Fallback: replace href/src/data attribute values via normalized URL comparison.
@@ -332,6 +361,11 @@ class LHA_Repair {
                 continue;
             }
 
+            if ( ! $this->post_matches_object_type( $post, (string) $occurrence['object_type'] ) ) {
+                $errors[] = sprintf( __( 'Post #%d no longer matches the scanned source type.', 'linkvitals' ), $post->ID );
+                continue;
+            }
+
             if ( ! $this->can_edit_post_content( $post ) ) {
                 $errors[] = $this->get_edit_permission_message( $post );
                 continue;
@@ -342,24 +376,29 @@ class LHA_Repair {
             $new_content = $replacement['content'];
 
             if ( $new_content !== $old_content ) {
+                $repair_id = $this->record_repair(
+                    'url_replaced',
+                    $occurrence,
+                    $post,
+                    $old_url,
+                    $new_url,
+                    $old_content,
+                    $new_content
+                );
+                if ( ! $repair_id ) {
+                    $errors[] = sprintf( __( 'Failed to record repair history for post #%d.', 'linkvitals' ), $post->ID );
+                    continue;
+                }
+
                 $result = wp_update_post( array(
                     'ID'           => $post->ID,
                     'post_content' => $new_content,
                 ), true );
 
                 if ( is_wp_error( $result ) ) {
+                    LHA_DB::delete_repair( $repair_id );
                     $errors[] = sprintf( __( 'Failed to update post #%d.', 'linkvitals' ), $post->ID );
                 } else {
-                    $this->record_repair(
-                        'url_replaced',
-                        $occurrence,
-                        $post,
-                        $old_url,
-                        $new_url,
-                        $old_content,
-                        $new_content
-                    );
-
                     $replaced += max( 1, (int) $replacement['count'] );
                     $resolved_targets[ $occurrence['object_type'] . ':' . (int) $occurrence['object_id'] ] = array(
                         'object_type' => $occurrence['object_type'],
@@ -381,7 +420,13 @@ class LHA_Repair {
 
         $resolved = false;
         if ( ! empty( $resolved_targets ) ) {
+            $scanner = new LHA_Scanner();
             foreach ( $resolved_targets as $target ) {
+                if ( ! $scanner->queue_repair_refresh( (string) $target['object_type'], (int) $target['object_id'] ) ) {
+                    $errors[] = sprintf( __( 'Failed to queue a scan refresh for post #%d.', 'linkvitals' ), $target['object_id'] );
+                    continue;
+                }
+
                 $wpdb->delete(
                     $table_occurrences,
                     array(
@@ -391,21 +436,29 @@ class LHA_Repair {
                     ),
                     array( '%d', '%s', '%d' )
                 );
+                $resolved = true;
             }
-            LHA_DB::cleanup_orphaned_links();
-            $resolved = true;
+
+            if ( $resolved ) {
+                LHA_DB::cleanup_orphaned_links();
+            }
         } elseif ( $is_semantically_same_url ) {
             // Treat slash/fragment-only "fixes" as resolved to avoid keeping false-positive redirects.
             LHA_DB::mark_link_resolved( (int) $link['id'] );
             $resolved = true;
         }
 
+        $success = $replaced > 0 || $resolved;
+        $message = $success
+            ? sprintf( __( 'Replaced %d occurrence(s).', 'linkvitals' ), $replaced )
+            : (string) ( $errors[0] ?? __( 'No matching post content was changed.', 'linkvitals' ) );
+
         return array(
-            'success'  => true,
+            'success'  => $success,
             'replaced' => $replaced,
             'resolved' => $resolved,
             'errors'   => $errors,
-            'message'  => sprintf( __( 'Replaced %d occurrence(s).', 'linkvitals' ), $replaced ),
+            'message'  => $message,
         );
     }
 
@@ -456,6 +509,11 @@ class LHA_Repair {
                 continue;
             }
 
+            if ( ! $this->post_matches_object_type( $post, (string) $occurrence['object_type'] ) ) {
+                $errors[] = sprintf( __( 'Post #%d no longer matches the scanned source type.', 'linkvitals' ), $post->ID );
+                continue;
+            }
+
             if ( ! $this->can_edit_post_content( $post ) ) {
                 $errors[] = $this->get_edit_permission_message( $post );
                 continue;
@@ -468,17 +526,7 @@ class LHA_Repair {
             $new_content = $unlink_result['content'];
 
             if ( $new_content !== $old_content ) {
-                $result = wp_update_post( array(
-                    'ID'           => $post->ID,
-                    'post_content' => $new_content,
-                ), true );
-
-                if ( is_wp_error( $result ) ) {
-                    $errors[] = sprintf( __( 'Failed to update post #%d.', 'linkvitals' ), $post->ID );
-                    continue;
-                }
-
-                $this->record_repair(
+                $repair_id = $this->record_repair(
                     'link_unlinked',
                     $occurrence,
                     $post,
@@ -487,6 +535,21 @@ class LHA_Repair {
                     $old_content,
                     $new_content
                 );
+                if ( ! $repair_id ) {
+                    $errors[] = sprintf( __( 'Failed to record repair history for post #%d.', 'linkvitals' ), $post->ID );
+                    continue;
+                }
+
+                $result = wp_update_post( array(
+                    'ID'           => $post->ID,
+                    'post_content' => $new_content,
+                ), true );
+
+                if ( is_wp_error( $result ) ) {
+                    LHA_DB::delete_repair( $repair_id );
+                    $errors[] = sprintf( __( 'Failed to update post #%d.', 'linkvitals' ), $post->ID );
+                    continue;
+                }
 
                 $unlinked += max( 1, (int) $unlink_result['count'] );
                 $resolved_targets[ $occurrence['object_type'] . ':' . (int) $occurrence['object_id'] ] = array(
@@ -508,8 +571,14 @@ class LHA_Repair {
         if ( ! empty( $resolved_targets ) ) {
             global $wpdb;
             $table_occurrences = LHA_DB::table( 'occurrences' );
+            $scanner = new LHA_Scanner();
 
             foreach ( $resolved_targets as $target ) {
+                if ( ! $scanner->queue_repair_refresh( (string) $target['object_type'], (int) $target['object_id'] ) ) {
+                    $errors[] = sprintf( __( 'Failed to queue a scan refresh for post #%d.', 'linkvitals' ), $target['object_id'] );
+                    continue;
+                }
+
                 $wpdb->delete(
                     $table_occurrences,
                     array(
@@ -523,11 +592,16 @@ class LHA_Repair {
             LHA_DB::cleanup_orphaned_links();
         }
 
+        $success = $unlinked > 0;
+        $message = $success
+            ? sprintf( __( 'Unlinked %d occurrence(s).', 'linkvitals' ), $unlinked )
+            : (string) ( $errors[0] ?? __( 'No matching anchor was found in editable post content.', 'linkvitals' ) );
+
         return array(
-            'success'  => true,
+            'success'  => $success,
             'unlinked' => $unlinked,
             'errors'   => $errors,
-            'message'  => sprintf( __( 'Unlinked %d occurrence(s).', 'linkvitals' ), $unlinked ),
+            'message'  => $message,
         );
     }
 
@@ -560,6 +634,10 @@ class LHA_Repair {
         $post = get_post( (int) $repair['object_id'] );
         if ( ! $post ) {
             return array( 'success' => false, 'message' => __( 'Post not found.', 'linkvitals' ) );
+        }
+
+        if ( ! $this->post_matches_object_type( $post, (string) $repair['object_type'] ) ) {
+            return array( 'success' => false, 'message' => __( 'The repair source no longer matches the current post type.', 'linkvitals' ) );
         }
 
         if ( ! $this->can_edit_post_content( $post ) ) {
@@ -600,23 +678,17 @@ class LHA_Repair {
             sprintf( __( 'Rolled back repair in %s', 'linkvitals' ), $post->post_title )
         );
 
-        $queue = new LHA_Queue();
-        $queue->add(
+        $refresh_queued = ( new LHA_Scanner() )->queue_repair_refresh(
             (string) $repair['object_type'],
-            (int) $repair['object_id'],
-            get_permalink( $post ) ?: '',
-            1
+            (int) $repair['object_id']
         );
-        // Preserve the cursor boundary when this repair joins an active scan.
-        if ( in_array( get_option( 'lha_scan_status', 'idle' ), array( 'running', 'paused' ), true ) ) {
-            update_option( 'lha_scan_status', 'running' );
-        } else {
-            LHA_Scanner::record_scan_start( 'repair' );
-        }
 
         return array(
-            'success' => true,
-            'message' => __( 'Repair rolled back.', 'linkvitals' ),
+            'success'        => true,
+            'refresh_queued' => $refresh_queued,
+            'message'        => $refresh_queued
+                ? __( 'Repair rolled back.', 'linkvitals' )
+                : __( 'Repair rolled back, but its scan refresh could not be queued.', 'linkvitals' ),
         );
     }
 
@@ -628,6 +700,10 @@ class LHA_Repair {
      * @return array Preview data
      */
     public function get_replace_preview( string $old_url, ?int $object_id = null ): array {
+        if ( ! LHA_Security::check_permission() ) {
+            return array( 'count' => 0, 'posts' => array() );
+        }
+
         global $wpdb;
 
         $table_occurrences = LHA_DB::table( 'occurrences' );
@@ -651,9 +727,27 @@ class LHA_Repair {
             ARRAY_A
         );
 
+        $editable_posts = array();
+        foreach ( $affected ?: array() as $source ) {
+            $source_type = (string) ( $source['object_type'] ?? '' );
+            if ( ! $this->is_supported_post_object_type( $source_type ) ) {
+                continue;
+            }
+
+            $post = get_post( (int) ( $source['object_id'] ?? 0 ) );
+            if ( ! $post
+                || ! $this->post_matches_object_type( $post, $source_type )
+                || ! $this->can_edit_post_content( $post )
+            ) {
+                continue;
+            }
+
+            $editable_posts[] = $source;
+        }
+
         return array(
-            'count' => count( $affected ),
-            'posts' => $affected ?: array(),
+            'count' => count( $editable_posts ),
+            'posts' => $editable_posts,
         );
     }
 }

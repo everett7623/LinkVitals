@@ -929,12 +929,22 @@ class LHA_DB {
      * links via get_unchecked_links() and re-runs check_links_batch(), which
      * applies all settings and ignore lists correctly.
      *
-     * @return int Number of links reset.
+     * @return int|false Number of links queued, or false on database failure.
      */
-    public static function reset_links_for_recheck(): int {
+    public static function reset_links_for_recheck(): int|false {
         global $wpdb;
 
         $table = self::table( 'links' );
+
+        $count = $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE is_ignored = 0" );
+        if ( null === $count ) {
+            return false;
+        }
+
+        $total = (int) $count;
+        if ( $total < 1 ) {
+            return 0;
+        }
 
         $updated = $wpdb->query(
             $wpdb->prepare(
@@ -943,7 +953,7 @@ class LHA_DB {
             )
         );
 
-        return (int) $updated;
+        return false === $updated ? false : $total;
     }
 
     /**
@@ -1102,6 +1112,17 @@ class LHA_DB {
         );
 
         return $result ?: null;
+    }
+
+    /** Delete a repair snapshot when its corresponding content write fails. */
+    public static function delete_repair( int $repair_id ): bool {
+        global $wpdb;
+
+        return false !== $wpdb->delete(
+            self::table( 'repairs' ),
+            array( 'id' => absint( $repair_id ) ),
+            array( '%d' )
+        );
     }
 
     /**

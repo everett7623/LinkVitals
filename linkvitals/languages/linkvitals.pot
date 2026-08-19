@@ -2,7 +2,7 @@
 # This file is distributed under the same license as the LinkVitals package.
 msgid ""
 msgstr ""
-"Project-Id-Version: LinkVitals 0.3.30\n"
+"Project-Id-Version: LinkVitals 0.3.35\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/linkvitals\n"
 "POT-Creation-Date: 2026-07-15 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -1452,4 +1452,39 @@ msgstr ""
 
 #: includes/class-lha-admin.php:322
 msgid "Last Scan Started:"
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-repair.php:379
+#: includes/class-lha-repair.php:515
+msgid "Failed to record repair history for post #%d."
+msgstr ""
+
+#: includes/class-lha-repair.php:568
+msgid "No matching anchor was found in editable post content."
+msgstr ""
+
+#: includes/class-lha-repair.php:435
+msgid "No matching post content was changed."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-repair.php:426
+#: includes/class-lha-repair.php:578
+msgid "Failed to queue a scan refresh for post #%d."
+msgstr ""
+
+#: includes/class-lha-repair.php:365
+#: includes/class-lha-repair.php:513
+msgid "Post #%d no longer matches the scanned source type."
+msgstr ""
+
+#: includes/class-lha-repair.php:691
+msgid "Repair rolled back, but its scan refresh could not be queued."
+msgstr ""
+
+#: includes/class-lha-repair.php:640
+msgid "The repair source no longer matches the current post type."
 msgstr ""

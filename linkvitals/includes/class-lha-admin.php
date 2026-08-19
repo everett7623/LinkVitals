@@ -1033,7 +1033,6 @@ class LHA_Admin {
 
         $type = isset( $_POST['scan_type'] ) ? sanitize_key( $_POST['scan_type'] ) : 'full';
         $scanner = new LHA_Scanner();
-        LHA_Cron::begin_notification_tracking( true );
 
         switch ( $type ) {
             case 'incremental':
@@ -1045,10 +1044,6 @@ class LHA_Admin {
             default:
                 $result = $scanner->start_full_scan();
                 break;
-        }
-
-        if ( 'started' !== ( $result['status'] ?? '' ) ) {
-            LHA_Cron::clear_notification_tracking();
         }
 
         wp_send_json_success( $result );
@@ -1072,8 +1067,16 @@ class LHA_Admin {
     public function ajax_process_batch(): void {
         LHA_Security::ajax_check();
 
-        LHA_Cron::begin_notification_tracking();
         $scanner = new LHA_Scanner();
+        $scan_status = (string) get_option( 'lha_scan_status', 'idle' );
+        if ( 'running' !== $scan_status ) {
+            // Let the scanner report the authoritative idle/paused/completed
+            // state without creating a baseline for work that never ran.
+            wp_send_json_success( $scanner->process_queue_batch() );
+            return;
+        }
+
+        LHA_Cron::begin_notification_tracking();
         $result  = $scanner->process_queue_batch();
 
         if ( 'completed' === ( $result['status'] ?? '' ) ) {
@@ -1090,9 +1093,9 @@ class LHA_Admin {
         LHA_Security::ajax_check();
 
         $scanner = new LHA_Scanner();
-        $scanner->pause();
+        $status = $scanner->pause();
 
-        wp_send_json_success( array( 'status' => 'paused' ) );
+        wp_send_json_success( array( 'status' => $status ) );
     }
 
     /**
@@ -1102,9 +1105,9 @@ class LHA_Admin {
         LHA_Security::ajax_check();
 
         $scanner = new LHA_Scanner();
-        $scanner->resume();
+        $status = $scanner->resume();
 
-        wp_send_json_success( array( 'status' => 'running' ) );
+        wp_send_json_success( array( 'status' => $status ) );
     }
 
     /**
@@ -1536,6 +1539,8 @@ class LHA_Admin {
         delete_option( 'lha_last_scan_time' );
         delete_option( 'lha_scan_started_at' );
         delete_option( 'lha_scan_type' );
+        delete_option( 'lha_scan_token' );
+        delete_option( 'lha_scan_state_lock' );
         delete_option( 'lha_content_scan_cursor' );
         delete_transient( 'lha_notice_check' );
         LHA_Cron::reset_notification_tracking();

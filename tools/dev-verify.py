@@ -374,6 +374,8 @@ def check_repair_safety(reporter: Reporter) -> None:
     repair_text = read_text(PLUGIN / "includes" / "class-lha-repair.php")
     admin_text = read_text(PLUGIN / "includes" / "class-lha-admin.php")
     db_text = read_text(PLUGIN / "includes" / "class-lha-db.php")
+    queue_text = read_text(PLUGIN / "includes" / "class-lha-queue.php")
+    scanner_text = read_text(PLUGIN / "includes" / "class-lha-scanner.php")
 
     if "is_supported_post_object_type" not in repair_text:
         reporter.fail("LHA_Repair is missing a shared supported-object guard.")
@@ -391,6 +393,46 @@ def check_repair_safety(reporter: Reporter) -> None:
         reporter.fail("LHA_Repair::unlink() does not handle wp_update_post() errors.")
     else:
         reporter.ok("LHA_Repair::unlink() guards object types and handles update errors.")
+
+    replace_match = re.search(r"public function replace_url\s*\([^)]*\)\s*:\s*array\s*\{(?P<body>.*?)(?=\n    /\*\*)", repair_text, re.S)
+    replace_body = replace_match.group("body") if replace_match else ""
+    repair_write_checks = {
+        "bounded URL tokens": "replace_bounded_url" in repair_text and "str_replace( $variant" not in repair_text,
+        "replace snapshot before write": (
+            replace_body.find("$repair_id = $this->record_repair(") >= 0
+            and replace_body.find("$repair_id = $this->record_repair(") < replace_body.find("wp_update_post(")
+        ),
+        "unlink snapshot before write": (
+            unlink_body.find("$repair_id = $this->record_repair(") >= 0
+            and unlink_body.find("$repair_id = $this->record_repair(") < unlink_body.find("wp_update_post(")
+        ),
+        "failed-write snapshot cleanup": (
+            repair_text.count("LHA_DB::delete_repair( $repair_id )") >= 2
+            and "public static function delete_repair" in db_text
+        ),
+        "paused rollback preservation": (
+            "public function queue_repair_refresh" in scanner_text
+            and "if ( ! self::is_scan_active() )" in scanner_text
+            and "self::write_scan_start( 'repair' )" in scanner_text
+            and "update_option( 'lha_scan_status', 'running' )" not in repair_text
+        ),
+        "repair occurrence refresh": repair_text.count("queue_repair_refresh(") >= 3,
+        "claimed-item follow-up refresh": (
+            "public function add_refresh" in queue_text
+            and "status = 'pending' LIMIT 1" in queue_text
+            and "$this->queue->add_refresh(" in scanner_text
+        ),
+        "preview target filtering": (
+            "get_replace_preview" in repair_text
+            and "post_matches_object_type" in repair_text
+            and "can_edit_post_content( $post )" in repair_text
+        ),
+    }
+    missing_writes = [name for name, ok in repair_write_checks.items() if not ok]
+    if missing_writes:
+        reporter.fail("Repair write-safety check(s) missing: " + ", ".join(missing_writes))
+    else:
+        reporter.ok("Repair writes use bounded URL tokens, durable snapshots, and paused-state preservation.")
 
     repair_history_checks = {
         "repairs table": "CREATE TABLE {$table_repairs}" in db_text,
@@ -593,14 +635,14 @@ def check_scan_recheck_and_incremental(reporter: Reporter) -> None:
     db_text = read_text(PLUGIN / "includes" / "class-lha-db.php")
 
     recheck_start = scanner_text.find("public function recheck_broken()")
-    recheck_end = scanner_text.find("public function process_queue_batch()", recheck_start)
+    recheck_end = scanner_text.find("public function queue_all_links_for_recheck()", recheck_start)
     recheck_section = scanner_text[recheck_start:recheck_end]
     recheck_ok = all(
         (
             "reset_issue_links_for_recheck" in db_text,
             "WHERE status IN ({$placeholders}) AND is_ignored = 0" in db_text,
             "LHA_DB::reset_issue_links_for_recheck()" in recheck_section,
-            "self::record_scan_start( 'recheck' )" in recheck_section,
+            "self::write_scan_start( 'recheck' )" in recheck_section,
             "$this->checker->check" not in recheck_section,
         )
     )
@@ -608,6 +650,31 @@ def check_scan_recheck_and_incremental(reporter: Reporter) -> None:
         reporter.ok("Issue rechecks are queued through the bounded background pipeline.")
     else:
         reporter.fail("Issue rechecks must reset every actionable link for bounded background processing.")
+
+    upgrade_start = scanner_text.find("public function queue_all_links_for_recheck()")
+    upgrade_end = scanner_text.find("public function process_queue_batch()", upgrade_start)
+    upgrade_section = scanner_text[upgrade_start:upgrade_end]
+    baseline_position = upgrade_section.find("LHA_Cron::begin_notification_tracking( true )")
+    reset_position = upgrade_section.find("LHA_DB::reset_links_for_recheck()")
+    start_position = upgrade_section.find("self::write_scan_start( 'recheck' )")
+    upgrade_ok = all(
+        (
+            upgrade_start >= 0,
+            baseline_position >= 0,
+            reset_position > baseline_position,
+            start_position > reset_position,
+            "array( 'status' => 'busy', 'queued' => 0 )" in upgrade_section,
+            "array( 'status' => 'failed', 'queued' => 0 )" in upgrade_section,
+            "SELECT COUNT(*) FROM {$table} WHERE is_ignored = 0" in db_text,
+            "( new LHA_Scanner() )->queue_all_links_for_recheck()" in read_text(MAIN),
+            "update_option( 'lha_version', $upgraded ? LHA_VERSION : $current_version )" in read_text(MAIN),
+            "update_option( 'lha_scan_status', 'running' )" not in read_text(MAIN),
+        )
+    )
+    if upgrade_ok:
+        reporter.ok("Upgrade rechecks are serialized, pause-aware, and retryable.")
+    else:
+        reporter.fail("Upgrade rechecks must preserve active scan state and retry when queueing is unsafe.")
 
     taxonomy_start = scanner_text.find("private function queue_taxonomies(")
     taxonomy_end = scanner_text.find("* Pause scanning.", taxonomy_start)
@@ -640,10 +707,14 @@ def check_scan_recheck_and_incremental(reporter: Reporter) -> None:
             "get_option( 'lha_last_scan_time', '' )" in scanner_text,
             "update_option( 'lha_content_scan_cursor', $started_at )" in scanner_text,
             "update_option( 'lha_last_scan_time', current_time( 'mysql' ) )" in scanner_text,
-            "self::record_scan_start( 'full', $started_at )" in scanner_text,
-            "self::record_scan_start( 'incremental', $started_at )" in scanner_text,
-            "LHA_Scanner::record_scan_start( 'recheck' )" in main_text,
-            "LHA_Scanner::record_scan_start( 'repair' )" in repair_text,
+            "self::write_scan_start( 'full', $started_at )" in scanner_text,
+            "self::write_scan_start( 'incremental', $started_at )" in scanner_text,
+            "update_option( 'lha_scan_token', wp_generate_uuid4() )" in scanner_text,
+            "record_scan_completion( string $expected_token ): bool" in scanner_text,
+            "min( 100, max( 1, absint( $settings['batch_size'] ) ) )" in scanner_text,
+            "private static function acquire_scan_state_lock()" in scanner_text,
+            "public function queue_all_links_for_recheck" in scanner_text,
+            "self::write_scan_start( 'repair' )" in scanner_text,
             "Last Scan Started:" in admin_text,
             "Last Scan Completed:" in admin_text,
             "delete_option( 'lha_content_scan_cursor' )" in admin_text,
@@ -810,12 +881,14 @@ def check_queue_population_performance(reporter: Reporter) -> None:
 def check_notifications_and_uninstall(reporter: Reporter) -> None:
     admin_text = read_text(PLUGIN / "includes" / "class-lha-admin.php")
     cron_text = read_text(PLUGIN / "includes" / "class-lha-cron.php")
+    scanner_text = read_text(PLUGIN / "includes" / "class-lha-scanner.php")
     deactivator_text = read_text(PLUGIN / "includes" / "class-lha-deactivator.php")
     uninstall_text = read_text(PLUGIN / "uninstall.php")
 
     notification_ok = all(
         (
-            "LHA_Cron::begin_notification_tracking( true )" in admin_text,
+            "LHA_Cron::begin_notification_tracking( true )" not in admin_text,
+            "LHA_Cron::begin_notification_tracking( true )" in scanner_text,
             "LHA_Cron::complete_notification_tracking()" in admin_text,
             "self::complete_notification_tracking()" in cron_text,
             "add_option( self::NOTIFICATION_LOCK_OPTION" in cron_text,
@@ -839,6 +912,8 @@ def check_notifications_and_uninstall(reporter: Reporter) -> None:
             "delete_option( 'lha_notification_lock' )" in uninstall_text,
             "delete_option( 'lha_scan_started_at' )" in uninstall_text,
             "delete_option( 'lha_scan_type' )" in uninstall_text,
+            "delete_option( 'lha_scan_token' )" in uninstall_text,
+            "delete_option( 'lha_scan_state_lock' )" in uninstall_text,
             "delete_option( 'lha_content_scan_cursor' )" in uninstall_text,
             "if ( ! $delete_data ) {\n    return;" not in uninstall_text,
         )
@@ -929,6 +1004,11 @@ def check_ci_workflow(reporter: Reporter) -> None:
             "$repair->replace_url(" in integration_text,
             "$repair->rollback( $repair_id )" in integration_text,
             "Rollback ignored a newer content edit." in integration_text,
+            "Repair rollback resumed an explicitly paused scan." in integration_text,
+            "A no-op URL repair reported success." in integration_text,
+            "A processing queue item suppressed the repaired post refresh." in integration_text,
+            "An upgrade recheck resumed an explicitly paused scan." in integration_text,
+            "Replacement preview exposed an unsupported menu source." in integration_text,
             "$repair->unlink( $unlink_link_id, $unlink_post_id )" in integration_text,
             "The unlink did not preserve anchor text." in integration_text,
             "The unlink repair snapshot was not recorded." in integration_text,

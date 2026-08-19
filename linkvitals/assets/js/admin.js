@@ -232,8 +232,13 @@
                                     self.processBatch();
                                 }, 1000);
                             }
-                        } else if (data.status === 'completed') {
+                        } else if (data.status === 'completed' || data.status === 'idle') {
                             self.onScanComplete();
+                        } else if (data.status === 'paused') {
+                            self.onScanPaused();
+                        } else {
+                            self.isScanning = false;
+                            self.stopPolling();
                         }
                     }
                 },
@@ -284,6 +289,8 @@
 
                         if (data.status === 'completed' || data.status === 'idle') {
                             self.onScanComplete();
+                        } else if (data.status === 'paused') {
+                            self.onScanPaused();
                         }
                     }
                 }
@@ -312,6 +319,13 @@
             }, 2000);
         },
 
+        onScanPaused: function() {
+            this.isScanning = false;
+            this.stopPolling();
+            $('#lha-btn-pause').hide();
+            $('#lha-btn-resume').show();
+        },
+
         /**
          * Pause the current scan
          */
@@ -327,10 +341,14 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                        self.isScanning = false;
-                        self.stopPolling();
-                        $('#lha-btn-pause').hide();
-                        $('#lha-btn-resume').show();
+                        if (response.data && response.data.status === 'paused') {
+                            self.onScanPaused();
+                        } else {
+                            self.isScanning = false;
+                            self.stopPolling();
+                            $('#lha-btn-pause').hide();
+                            $('#lha-btn-resume').hide();
+                        }
                     }
                 }
             });
@@ -351,11 +369,18 @@
                 },
                 success: function(response) {
                     if (response.success) {
-                        self.isScanning = true;
-                        $('#lha-btn-pause').show();
-                        $('#lha-btn-resume').hide();
-                        self.startPolling();
-                        self.processBatch();
+                        if (response.data && response.data.status === 'running') {
+                            self.isScanning = true;
+                            $('#lha-btn-pause').show();
+                            $('#lha-btn-resume').hide();
+                            self.startPolling();
+                            self.processBatch();
+                        } else {
+                            self.isScanning = false;
+                            self.stopPolling();
+                            $('#lha-btn-pause').hide();
+                            $('#lha-btn-resume').hide();
+                        }
                     }
                 }
             });

@@ -106,12 +106,10 @@ class LHA_Cron {
             return;
         }
 
-        self::begin_notification_tracking( true );
         $scanner = new LHA_Scanner();
         $result  = $scanner->start_incremental_scan();
 
         if ( 'started' !== ( $result['status'] ?? '' ) ) {
-            self::clear_notification_tracking();
             return;
         }
 

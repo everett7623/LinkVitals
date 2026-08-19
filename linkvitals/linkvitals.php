@@ -3,7 +3,7 @@
  * Plugin Name: LinkVitals – Link Health & SEO Auditor
  * Plugin URI: https://github.com/everett7623/LinkVitals
  * Description: Comprehensive link health audit plugin for WordPress. Detects broken links, redirects, timeouts, SSL errors, orphaned pages, and SEO link risks across posts, pages, menus, and custom post types.
- * Version: 0.3.30
+ * Version: 0.3.35
  * Requires at least: 6.4
  * Requires PHP: 8.0
  * Author: everettlabs
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'LHA_VERSION', '0.3.30' );
+define( 'LHA_VERSION', '0.3.35' );
 define( 'LHA_PLUGIN_FILE', __FILE__ );
 define( 'LHA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LHA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -190,8 +190,8 @@ final class LinkVitals_Plugin {
         $current_version = get_option( 'lha_version', '0' );
         if ( version_compare( $current_version, LHA_VERSION, '<' ) ) {
             LHA_Activator::activate();
-            $this->run_upgrade_routines( $current_version );
-            update_option( 'lha_version', LHA_VERSION );
+            $upgraded = $this->run_upgrade_routines( $current_version );
+            update_option( 'lha_version', $upgraded ? LHA_VERSION : $current_version );
         }
     }
 
@@ -199,14 +199,17 @@ final class LinkVitals_Plugin {
      * Run version-specific upgrade routines
      *
      * @param string $old_version The previous plugin version.
+     * @return bool Whether all required routines completed safely.
      */
-    private function run_upgrade_routines( string $old_version ): void {
+    private function run_upgrade_routines( string $old_version ): bool {
         // Recheck all links when upgrading to fix status classification changes
         // (e.g. corrected redirect detection). Anything below the current version
         // predates the latest classification logic and should be re-evaluated.
         if ( version_compare( $old_version, LHA_VERSION, '<' ) ) {
-            $this->recheck_all_links();
+            return $this->recheck_all_links();
         }
+
+        return true;
     }
 
     /**
@@ -218,19 +221,12 @@ final class LinkVitals_Plugin {
      * (lha_process_queue -> LHA_DB::get_unchecked_links -> check_links_batch)
      * then rechecks them in batches, correctly applying ignore lists, per-type
      * settings, non-HTTP skipping, and the atomic check_count increment.
+     *
+     * @return bool Whether the recheck was queued or no links required it.
      */
-    private function recheck_all_links(): void {
-        $reset = LHA_DB::reset_links_for_recheck();
-
-        if ( $reset > 0 ) {
-            // Preserve an active content scan's type and cursor boundary.
-            $scan_status = get_option( 'lha_scan_status', 'idle' );
-            if ( in_array( $scan_status, array( 'running', 'paused' ), true ) ) {
-                update_option( 'lha_scan_status', 'running' );
-            } else {
-                LHA_Scanner::record_scan_start( 'recheck' );
-            }
-        }
+    private function recheck_all_links(): bool {
+        $result = ( new LHA_Scanner() )->queue_all_links_for_recheck();
+        return ! in_array( $result['status'], array( 'busy', 'failed' ), true );
     }
 }
 

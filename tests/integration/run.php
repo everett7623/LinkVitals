@@ -313,6 +313,56 @@ lha_integration_assert(
     'The worker holding the current claim could not complete its item.'
 );
 
+lha_integration_assert( $queue->clear(), 'Could not clear the queue before scan-generation tests.' );
+$overlap_queue_id = $queue->add( 'post', 94001, 'https://example.test/overlap', 1 );
+lha_integration_assert( is_int( $overlap_queue_id ) && $overlap_queue_id > 0, 'Could not create the overlap-start fixture.' );
+update_option( 'lha_scan_status', 'running' );
+update_option( 'lha_scan_token', 'active-integration-scan-token' );
+update_option( 'lha_scan_type', 'full' );
+set_transient( 'lha_pre_scan_broken_count', 9, HOUR_IN_SECONDS );
+
+$overlap_result = ( new LHA_Scanner() )->start_full_scan();
+lha_integration_assert( 'already_running' === $overlap_result['status'], 'A second full scan was allowed to start.' );
+lha_integration_assert(
+    1 === (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$queue_table} WHERE id = %d", $overlap_queue_id ) ),
+    'A rejected overlapping scan cleared active queue work.'
+);
+lha_integration_assert(
+    'active-integration-scan-token' === get_option( 'lha_scan_token' ),
+    'A rejected overlapping scan replaced the active scan token.'
+);
+lha_integration_assert(
+    9 === get_transient( 'lha_pre_scan_broken_count' ),
+    'A rejected overlapping scan changed the active notification baseline.'
+);
+
+$completion_method = new ReflectionMethod( LHA_Scanner::class, 'record_scan_completion' );
+$completion_method->setAccessible( true );
+$stale_completion = $completion_method->invoke( new LHA_Scanner(), 'stale-integration-scan-token' );
+lha_integration_assert( false === $stale_completion, 'A stale scan generation was allowed to complete newer work.' );
+lha_integration_assert( 'running' === get_option( 'lha_scan_status' ), 'A stale completion changed the active scan status.' );
+lha_integration_assert( false === get_option( 'lha_scan_state_lock', false ), 'The completion fence left its state lock behind.' );
+
+delete_transient( 'lha_pre_scan_broken_count' );
+update_option( 'lha_scan_status', 'completed' );
+delete_option( 'lha_scan_token' );
+lha_integration_assert( $queue->clear(), 'Could not clear the queue after scan-generation tests.' );
+
+$settings['batch_size'] = 0;
+update_option( 'lha_settings', $settings );
+$bounded_queue_id = $queue->add( 'post', 95001, 'https://example.test/bounded', 1 );
+lha_integration_assert( is_int( $bounded_queue_id ) && $bounded_queue_id > 0, 'Could not create the runtime batch-boundary fixture.' );
+LHA_Scanner::record_scan_start( 'recheck' );
+$bounded_result = ( new LHA_Scanner() )->process_queue_batch();
+$bounded_row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$queue_table} WHERE id = %d", $bounded_queue_id ), ARRAY_A );
+lha_integration_assert( 1 === $bounded_result['processed'], 'A zero stored batch size prevented bounded queue progress.' );
+lha_integration_assert( 'done' === $bounded_row['status'], 'The bounded runtime batch did not finish its queue item.' );
+update_option( 'lha_scan_status', 'completed' );
+delete_option( 'lha_scan_token' );
+lha_integration_assert( $queue->clear(), 'Could not clear the runtime batch-boundary fixture.' );
+$settings['batch_size'] = 20;
+update_option( 'lha_settings', $settings );
+
 lha_integration_assert( $queue->clear(), 'Could not clear the queue before scanner failure tests.' );
 $preserved_url = 'mailto:preserved@example.test';
 $successful_url = 'mailto:successful@example.test';
@@ -479,7 +529,6 @@ $mail_filter = static function( mixed $return, array $mail ): bool {
 add_filter( 'pre_http_request', $http_filter, 10, 3 );
 add_filter( 'pre_wp_mail', $mail_filter, 10, 2 );
 
-LHA_Cron::begin_notification_tracking( true );
 $background_scanner = new LHA_Scanner();
 $background_result  = $background_scanner->start_full_scan();
 lha_integration_assert( 'started' === $background_result['status'], 'The background full scan did not start.' );
@@ -590,10 +639,15 @@ lha_integration_assert( is_int( $incremental_changed_id ) && $incremental_change
 lha_integration_assert( is_int( $incremental_unchanged_id ) && $incremental_unchanged_id > 0, 'Could not create the unchanged incremental fixture.' );
 
 $pause_scanner = new LHA_Scanner();
+$pause_scanner->pause();
+lha_integration_assert( 'completed' === get_option( 'lha_scan_status' ), 'Pausing a completed scan changed its state.' );
+$pause_scanner->resume();
+lha_integration_assert( 'completed' === get_option( 'lha_scan_status' ), 'Resuming a completed scan changed its state.' );
 $pause_result  = $pause_scanner->start_full_scan();
 lha_integration_assert( 'started' === $pause_result['status'], 'The pause/resume scan did not start.' );
 $cron->process_queue();
-$pause_scanner->pause();
+$pause_status = $pause_scanner->pause();
+lha_integration_assert( 'paused' === $pause_status, 'Pausing a running scan did not return paused.' );
 $paused_progress = $pause_scanner->get_progress();
 lha_integration_assert( 'paused' === $paused_progress['status'], 'The scan did not enter paused state.' );
 
@@ -601,7 +655,8 @@ $cron->process_queue();
 $still_paused_progress = $pause_scanner->get_progress();
 lha_integration_assert( $paused_progress === $still_paused_progress, 'Cron advanced queue state while the scan was paused.' );
 
-$pause_scanner->resume();
+$resume_status = $pause_scanner->resume();
+lha_integration_assert( 'running' === $resume_status, 'Resuming a paused scan did not return running.' );
 lha_integration_assert( 'running' === get_option( 'lha_scan_status' ), 'The scan did not resume.' );
 $resume_iterations = 0;
 while ( 'running' === get_option( 'lha_scan_status' ) && $resume_iterations < 50 ) {
@@ -610,6 +665,8 @@ while ( 'running' === get_option( 'lha_scan_status' ) && $resume_iterations < 50
 }
 lha_integration_assert( $resume_iterations > 0 && $resume_iterations < 50, 'The resumed scan did not converge.' );
 lha_integration_assert( 'completed' === get_option( 'lha_scan_status' ), 'The resumed scan did not complete.' );
+lha_integration_assert( 'completed' === $pause_scanner->pause(), 'Pausing a completed scan did not preserve completed state.' );
+lha_integration_assert( 'completed' === $pause_scanner->resume(), 'Resuming a completed scan did not preserve completed state.' );
 
 $incremental_url = 'https://batch.example.test/incremental-missing';
 $incremental_update = wp_update_post(
@@ -837,14 +894,35 @@ $repair_post_id = wp_insert_post(
 lha_integration_assert( is_int( $repair_post_id ) && $repair_post_id > 0, 'Could not create the repair fixture.' );
 lha_integration_process_object( $scanner, 'post', $repair_post_id );
 
-$repair        = new LHA_Repair();
+$repair         = new LHA_Repair();
+$menu_preview   = $repair->get_replace_preview( $new_menu_url, $menu_item_id );
+$repair_preview = $repair->get_replace_preview( $old_repair_url, $repair_post_id );
+lha_integration_assert( 0 === $menu_preview['count'], 'Replacement preview exposed an unsupported menu source.' );
+lha_integration_assert( 1 === $repair_preview['count'], 'Replacement preview omitted an editable post source.' );
+$pre_repair_queue_id = $queue->add( 'post', $repair_post_id, '', 1 );
+$pre_repair_claim = $queue->get_pending( 1 );
+lha_integration_assert(
+    false !== $pre_repair_queue_id
+        && 1 === count( $pre_repair_claim )
+        && (int) $pre_repair_queue_id === (int) $pre_repair_claim[0]['id'],
+    'Could not claim the pre-repair queue item.'
+);
 $repair_result = $repair->replace_url( $old_repair_url, $new_repair_url, $repair_post_id );
 lha_integration_assert( true === $repair_result['success'], 'The URL replacement failed.' );
 lha_integration_assert( 1 === $repair_result['replaced'], 'The URL replacement count is incorrect.' );
+lha_integration_assert( 1 === lha_integration_pending_queue_count( 'post', $repair_post_id ), 'A processing queue item suppressed the repaired post refresh.' );
+lha_integration_assert( 'repair' === get_option( 'lha_scan_type' ), 'The repair refresh changed the content scan type.' );
 lha_integration_assert(
     str_contains( get_post( $repair_post_id )->post_content, $new_repair_url ),
     'The replacement URL was not written to post content.'
 );
+lha_integration_process_object( $scanner, 'post', $repair_post_id );
+lha_integration_assert(
+    1 === lha_integration_occurrence_count( $new_repair_url, 'post', $repair_post_id ),
+    'The repair refresh did not index the replacement URL.'
+);
+lha_integration_assert( $queue->clear(), 'Could not clear the replacement refresh queue.' );
+update_option( 'lha_scan_status', 'completed' );
 
 $repairs_table = LHA_DB::table( 'repairs' );
 $repair_id = (int) $wpdb->get_var(
@@ -875,8 +953,10 @@ $snapshot_update = wp_update_post(
     true
 );
 lha_integration_assert( ! is_wp_error( $snapshot_update ), 'Could not restore the repair snapshot.' );
+update_option( 'lha_scan_status', 'paused' );
 $rollback_result = $repair->rollback( $repair_id );
 lha_integration_assert( true === $rollback_result['success'], 'The guarded repair rollback failed.' );
+lha_integration_assert( 'paused' === get_option( 'lha_scan_status' ), 'Repair rollback resumed an explicitly paused scan.' );
 lha_integration_assert(
     $repair_content === get_post( $repair_post_id )->post_content,
     'Rollback did not restore the original post content.'
@@ -885,6 +965,8 @@ lha_integration_assert(
     'rolled_back' === LHA_DB::get_repair( $repair_id )['status'],
     'Rollback did not update the repair-history status.'
 );
+lha_integration_assert( $queue->clear(), 'Could not clear the paused rollback queue.' );
+update_option( 'lha_scan_status', 'completed' );
 
 $unlink_url = 'https://repair-unlink.example.test/target';
 $unlink_content = '<p><a href="' . $unlink_url . '"><strong>Keep</strong> text</a> and <a href="' . $unlink_url . '">Second</a> plus <a href="https://repair-unlink.example.test/keep">Other</a></p>';
@@ -931,6 +1013,54 @@ lha_integration_assert( $unlink_content === get_post( $unlink_post_id )->post_co
 wp_delete_post( $unlink_post_id, true );
 LHA_DB::delete_occurrences_by_object( 'post', $unlink_post_id );
 lha_integration_assert( $queue->clear(), 'Could not clear the queue after unlink tests.' );
+update_option( 'lha_scan_status', 'completed' );
+
+$noop_repair_url = 'https://repair-noop.example.test/target';
+$noop_repair_post_id = wp_insert_post(
+    array(
+        'post_type'    => 'post',
+        'post_status'  => 'publish',
+        'post_title'   => 'LinkVitals No-op Repair Fixture',
+        'post_content' => '<p><a href="' . $noop_repair_url . '">Stale target</a></p>',
+    ),
+    true
+);
+lha_integration_assert( is_int( $noop_repair_post_id ) && $noop_repair_post_id > 0, 'Could not create the no-op repair fixture.' );
+lha_integration_process_object( $scanner, 'post', $noop_repair_post_id );
+$noop_current_content = '<p>The target was removed before repair.</p>';
+$noop_update = wp_update_post(
+    array(
+        'ID'           => $noop_repair_post_id,
+        'post_content' => $noop_current_content,
+    ),
+    true
+);
+lha_integration_assert( ! is_wp_error( $noop_update ), 'Could not make the repair occurrence stale.' );
+$noop_result = $repair->replace_url( $noop_repair_url, 'https://repair-noop.example.test/fixed', $noop_repair_post_id );
+lha_integration_assert( false === $noop_result['success'], 'A no-op URL repair reported success.' );
+lha_integration_assert( 0 === $noop_result['replaced'], 'A no-op URL repair reported replacements.' );
+lha_integration_assert(
+    $noop_current_content === get_post( $noop_repair_post_id )->post_content,
+    'A no-op URL repair changed unrelated post content.'
+);
+wp_delete_post( $noop_repair_post_id, true );
+LHA_DB::delete_occurrences_by_object( 'post', $noop_repair_post_id );
+
+lha_integration_assert( $queue->clear(), 'Could not clear the queue before the upgrade recheck test.' );
+$upgrade_cursor = (string) get_option( 'lha_content_scan_cursor', '2000-01-01 00:00:00' );
+update_option( 'lha_scan_status', 'paused' );
+update_option( 'lha_scan_type', 'full' );
+update_option( 'lha_scan_token', 'paused-upgrade-token' );
+set_transient( 'lha_pre_scan_broken_count', 17, HOUR_IN_SECONDS );
+$upgrade_recheck = $scanner->queue_all_links_for_recheck();
+lha_integration_assert( 'paused' === $upgrade_recheck['status'], 'An upgrade recheck resumed an explicitly paused scan.' );
+lha_integration_assert( $upgrade_recheck['queued'] > 0, 'The upgrade recheck did not queue existing links.' );
+lha_integration_assert( 'paused' === get_option( 'lha_scan_status' ), 'The paused upgrade recheck changed scan status.' );
+lha_integration_assert( 'full' === get_option( 'lha_scan_type' ), 'The paused upgrade recheck replaced the active scan type.' );
+lha_integration_assert( 'paused-upgrade-token' === get_option( 'lha_scan_token' ), 'The paused upgrade recheck replaced the active scan token.' );
+lha_integration_assert( $upgrade_cursor === get_option( 'lha_content_scan_cursor' ), 'The paused upgrade recheck changed the content cursor.' );
+lha_integration_assert( 17 === get_transient( 'lha_pre_scan_broken_count' ), 'The paused upgrade recheck replaced the notification baseline.' );
+update_option( 'lha_scan_status', 'completed' );
 
 $settings['delete_data_on_uninstall'] = 1;
 update_option( 'lha_settings', $settings );

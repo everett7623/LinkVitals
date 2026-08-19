@@ -249,6 +249,23 @@ Recent cleanup already performed:
 - paged public taxonomy descriptions by stable term ID in 100-term windows so
   scan initialization does not load an entire large taxonomy at once
 - disabled unused post/term metadata cache priming during queue population
+- restricted pause and resume to valid running/paused state transitions and
+  made AJAX batch controls report and honor the authoritative scan state
+- bounded repair replacements to exact URL tokens, required rollback snapshots
+  before content writes, and preserved explicitly paused scans during rollback
+- serialized scan initialization so overlapping full, incremental, and issue-recheck starts cannot clear active queue work
+- moved scan notification-baseline capture into the serialized initialization path so concurrent starts cannot overwrite it
+- added scan-generation tokens that fence completion timestamps and incremental cursor promotion from stale workers
+- clamped runtime batch sizes before queue and pending-link processing even when stored options are corrupted
+- queued repaired posts for background occurrence refresh after replacement,
+  unlink, and rollback while preserving explicitly paused scan state
+- filtered replacement previews and repair writes against current post types and
+  edit permissions, and retained old occurrences when refresh queueing fails
+- ensured an already-processing queue item cannot suppress the post-edit refresh
+  needed to replace any stale occurrences it may write back
+- serialized version-upgrade all-link rechecks with scan state changes, preserved
+  paused generations and notification baselines, and retained the old version
+  marker so unsafe or failed queue attempts retry on the next admin request
 
 Known gaps:
 
@@ -400,8 +417,9 @@ setting follows the WordPress site language via `get_locale()` and maps `zh*`
 locales to `zh_CN`; other site locales use `en_US`.
 
 Scan state lives in `lha_scan_status`, `lha_scan_started_at`,
-`lha_last_scan_time`, `lha_scan_type`, `lha_content_scan_cursor`, and
-`lha_version`. `lha_last_scan_time` is written only when shared pipeline work
+`lha_last_scan_time`, `lha_scan_type`, `lha_scan_token`,
+`lha_content_scan_cursor`, and `lha_version`. `lha_scan_state_lock` serializes
+scan initialization and completion state transitions. `lha_last_scan_time` is written only when shared pipeline work
 finishes. Incremental scans use `lha_content_scan_cursor`, which is promoted
 from the start timestamp only after a full or incremental content scan
 completes; link-only rechecks and repair refreshes do not advance it.

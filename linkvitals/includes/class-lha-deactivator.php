@@ -52,6 +52,8 @@ class LHA_Deactivator {
 
         // Stop any running scan by setting status to idle.
         update_option( 'lha_scan_status', 'idle' );
+        delete_option( 'lha_scan_token' );
+        delete_option( 'lha_scan_state_lock' );
         LHA_Cron::reset_notification_tracking();
     }
 }

@@ -78,8 +78,28 @@ if ( ! function_exists( 'get_option' ) ) {
 }
 
 if ( ! function_exists( 'update_option' ) ) {
-    function update_option( string $name, mixed $value ): bool {
+    function update_option( string $name, mixed $value, ?bool $autoload = null ): bool {
+        unset( $autoload );
         $GLOBALS['lha_test_options'][ $name ] = $value;
+        return true;
+    }
+}
+
+if ( ! function_exists( 'add_option' ) ) {
+    function add_option( string $name, mixed $value, string $deprecated = '', bool $autoload = true ): bool {
+        unset( $deprecated, $autoload );
+        if ( array_key_exists( $name, $GLOBALS['lha_test_options'] ) ) {
+            return false;
+        }
+
+        $GLOBALS['lha_test_options'][ $name ] = $value;
+        return true;
+    }
+}
+
+if ( ! function_exists( 'delete_option' ) ) {
+    function delete_option( string $name ): bool {
+        unset( $GLOBALS['lha_test_options'][ $name ] );
         return true;
     }
 }
@@ -221,6 +241,21 @@ class LHA_Test_WPDB {
     }
 
     public function query( string $query ): int|false {
+        if ( str_contains( $query, "UPDATE wp_lha_links SET status = 'pending' WHERE is_ignored = 0" ) ) {
+            $this->operations[] = 'all_links_recheck_update';
+            $updated = 0;
+
+            foreach ( $this->rows as &$row ) {
+                if ( empty( $row['is_ignored'] ) ) {
+                    $row['status'] = 'pending';
+                    $updated++;
+                }
+            }
+            unset( $row );
+
+            return $updated;
+        }
+
         if ( str_contains( $query, "UPDATE wp_lha_links SET status = 'pending'" ) ) {
             $this->operations[] = 'issue_recheck_update';
             $updated = 0;
@@ -268,6 +303,19 @@ class LHA_Test_WPDB {
         return count( $claimed_ids );
     }
 
+    public function get_var( string $query ): mixed {
+        if ( str_contains( $query, 'SELECT COUNT(*) FROM wp_lha_links WHERE is_ignored = 0' ) ) {
+            return count(
+                array_filter(
+                    $this->rows,
+                    static fn( array $row ): bool => empty( $row['is_ignored'] )
+                )
+            );
+        }
+
+        return null;
+    }
+
     public function get_results( string $query, mixed $output = null ): array {
         unset( $output );
 
@@ -308,6 +356,9 @@ class LHA_Test_Queue extends LHA_Queue {
     /** @var array<int, array<string, mixed>> */
     public array $added = array();
 
+    /** @var array<int, int> */
+    public array $claimed_batch_sizes = array();
+
     /** @param array<string, int> $counts */
     public function __construct( array $counts ) {
         $this->counts = $counts;
@@ -319,7 +370,7 @@ class LHA_Test_Queue extends LHA_Queue {
     }
 
     public function get_pending( int $batch_size = 20 ): array {
-        unset( $batch_size );
+        $this->claimed_batch_sizes[] = $batch_size;
         return array();
     }
 
@@ -331,6 +382,10 @@ class LHA_Test_Queue extends LHA_Queue {
     public function add( string $object_type, int $object_id, string $object_url = '', int $priority = 5, bool $check_existing = true ): int|false {
         $this->added[] = compact( 'object_type', 'object_id', 'object_url', 'priority', 'check_existing' );
         return count( $this->added );
+    }
+
+    public function add_refresh( string $object_type, int $object_id, string $object_url = '', int $priority = 1 ): int|false {
+        return $this->add( $object_type, $object_id, $object_url, $priority );
     }
 
     public function add_many( array $items, bool $check_existing = true ): int {
@@ -345,6 +400,14 @@ class LHA_Test_Queue extends LHA_Queue {
         }
 
         return count( $items );
+    }
+}
+
+class LHA_Test_Token_Swapping_Queue extends LHA_Test_Queue {
+
+    public function get_counts(): array {
+        update_option( 'lha_scan_token', 'replacement-scan-token' );
+        return parent::get_counts();
     }
 }
 
@@ -1094,6 +1157,10 @@ lha_test(
         lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$repair->replace_url(' ) );
         lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$repair->rollback( $repair_id )' ) );
         lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'Rollback ignored a newer content edit.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'Repair rollback resumed an explicitly paused scan.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'A no-op URL repair reported success.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'The repaired post was not queued for refresh.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'Replacement preview exposed an unsupported menu source.' ) );
         lha_assert_same( true, is_string( $integration ) && str_contains( $integration, "add_filter( 'pre_http_request', \$http_filter, 10, 3 )" ) );
         lha_assert_same( true, is_string( $integration ) && str_contains( $integration, "add_filter( 'pre_wp_mail', \$mail_filter, 10, 2 )" ) );
         lha_assert_same( true, is_string( $integration ) && str_contains( $integration, "while ( 'running' === get_option( 'lha_scan_status' )" ) );
@@ -1319,6 +1386,200 @@ lha_test(
 );
 
 lha_test(
+    'keeps pause and resume actions within valid scan states',
+    static function(): void {
+        $GLOBALS['lha_test_options'] = array();
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB();
+        $scanner = new LHA_Scanner();
+
+        update_option( 'lha_scan_status', 'idle' );
+        lha_assert_same( 'idle', $scanner->pause() );
+        lha_assert_same( 'idle', get_option( 'lha_scan_status' ) );
+        lha_assert_same( 'idle', $scanner->resume() );
+
+        update_option( 'lha_scan_status', 'completed' );
+        lha_assert_same( 'completed', $scanner->pause() );
+        lha_assert_same( 'completed', $scanner->resume() );
+
+        update_option( 'lha_scan_status', 'running' );
+        lha_assert_same( 'paused', $scanner->pause() );
+        lha_assert_same( 'paused', get_option( 'lha_scan_status' ) );
+        lha_assert_same( 'running', $scanner->resume() );
+        lha_assert_same( 'running', get_option( 'lha_scan_status' ) );
+    }
+);
+
+lha_test(
+    'queues repair refreshes without advancing or resuming active scan state',
+    static function(): void {
+        foreach ( array( 'completed' => 'running', 'paused' => 'paused' ) as $initial_status => $expected_status ) {
+            $GLOBALS['lha_test_options'] = array(
+                'lha_scan_status'         => $initial_status,
+                'lha_scan_token'          => 'existing-repair-token',
+                'lha_scan_type'           => 'full',
+                'lha_content_scan_cursor' => '2026-07-01 00:00:00',
+            );
+            $GLOBALS['wpdb'] = new LHA_Test_WPDB();
+
+            $scanner = ( new ReflectionClass( LHA_Scanner::class ) )->newInstanceWithoutConstructor();
+            $queue = new LHA_Test_Queue( array() );
+            $queue_property = new ReflectionProperty( LHA_Scanner::class, 'queue' );
+            $queue_property->setAccessible( true );
+            $queue_property->setValue( $scanner, $queue );
+
+            lha_assert_same( true, $scanner->queue_repair_refresh( 'post', 42 ) );
+            lha_assert_same( 1, count( $queue->added ) );
+            lha_assert_same( 'post', $queue->added[0]['object_type'] );
+            lha_assert_same( 42, $queue->added[0]['object_id'] );
+            lha_assert_same( 1, $queue->added[0]['priority'] );
+            lha_assert_same( $expected_status, get_option( 'lha_scan_status' ) );
+            lha_assert_same( false, isset( $GLOBALS['lha_test_options']['lha_scan_state_lock'] ) );
+
+            if ( 'completed' === $initial_status ) {
+                lha_assert_same( 'repair', get_option( 'lha_scan_type' ) );
+                lha_assert_same( false, 'existing-repair-token' === get_option( 'lha_scan_token' ) );
+            } else {
+                lha_assert_same( 'full', get_option( 'lha_scan_type' ) );
+                lha_assert_same( 'existing-repair-token', get_option( 'lha_scan_token' ) );
+            }
+        }
+    }
+);
+
+lha_test(
+    'guards admin batch notifications and client state transitions',
+    static function(): void {
+        $admin = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
+        $client = file_get_contents( dirname( __DIR__ ) . '/linkvitals/assets/js/admin.js' );
+
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, "if ( 'running' !== \$scan_status )" ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::begin_notification_tracking();' ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, '$status = $scanner->pause();' ) );
+        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, '$status = $scanner->resume();' ) );
+        lha_assert_same( true, is_string( $client ) && str_contains( $client, 'onScanPaused: function()' ) );
+        lha_assert_same( true, is_string( $client ) && str_contains( $client, "data.status === 'paused'" ) );
+    }
+);
+
+lha_test(
+    'rejects overlapping scan starts without changing active scan state',
+    static function(): void {
+        $GLOBALS['lha_test_options'] = array(
+            'lha_scan_status'     => 'running',
+            'lha_scan_token'      => 'active-scan-token',
+            'lha_scan_type'       => 'full',
+            'lha_scan_started_at' => '2026-07-15 11:00:00',
+            'lha_settings'        => array( 'email_notifications' => 1 ),
+        );
+        $GLOBALS['lha_test_transients'] = array(
+            'lha_pre_scan_broken_count' => 7,
+        );
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB(
+            array(
+                array( 'id' => 1, 'status' => 'broken', 'is_ignored' => 0 ),
+            )
+        );
+
+        $scanner = new LHA_Scanner();
+
+        lha_assert_same(
+            array( 'status' => 'already_running', 'total_queued' => 0 ),
+            $scanner->start_full_scan()
+        );
+        lha_assert_same(
+            array( 'status' => 'already_running', 'total_queued' => 0 ),
+            $scanner->start_incremental_scan()
+        );
+        lha_assert_same(
+            array( 'status' => 'already_running', 'queued' => 0 ),
+            $scanner->recheck_broken()
+        );
+
+        lha_assert_same( 'running', $GLOBALS['lha_test_options']['lha_scan_status'] );
+        lha_assert_same( 'active-scan-token', $GLOBALS['lha_test_options']['lha_scan_token'] );
+        lha_assert_same( 'full', $GLOBALS['lha_test_options']['lha_scan_type'] );
+        lha_assert_same( 7, $GLOBALS['lha_test_transients']['lha_pre_scan_broken_count'] );
+        lha_assert_same( array(), $GLOBALS['wpdb']->operations );
+        lha_assert_same( false, isset( $GLOBALS['lha_test_options']['lha_scan_state_lock'] ) );
+    }
+);
+
+lha_test(
+    'clamps corrupted runtime batch sizes before queue and link processing',
+    static function(): void {
+        foreach ( array( 0 => 1, 1000 => 100 ) as $stored_size => $expected_size ) {
+            $GLOBALS['lha_test_options'] = array(
+                'lha_scan_status' => 'running',
+                'lha_scan_token'  => 'batch-scan-token',
+                'lha_settings'    => array( 'batch_size' => $stored_size ),
+            );
+            $GLOBALS['lha_test_db_events'] = array();
+            $GLOBALS['wpdb'] = new LHA_Test_WPDB();
+
+            $scanner = ( new ReflectionClass( LHA_Scanner::class ) )->newInstanceWithoutConstructor();
+            $queue   = new LHA_Test_Queue(
+                array(
+                    'pending'    => 0,
+                    'processing' => 1,
+                    'done'       => 0,
+                    'failed'     => 0,
+                    'paused'     => 0,
+                )
+            );
+            $queue_property = new ReflectionProperty( LHA_Scanner::class, 'queue' );
+            $queue_property->setAccessible( true );
+            $queue_property->setValue( $scanner, $queue );
+
+            $result = $scanner->process_queue_batch();
+
+            lha_assert_same( array( 'status' => 'running', 'processed' => 0 ), $result );
+            lha_assert_same( array( $expected_size ), $queue->claimed_batch_sizes );
+        }
+    }
+);
+
+lha_test(
+    'prevents an older scan token from completing a newer scan generation',
+    static function(): void {
+        $GLOBALS['lha_test_options'] = array(
+            'lha_scan_status'        => 'running',
+            'lha_scan_token'         => 'original-scan-token',
+            'lha_scan_type'          => 'full',
+            'lha_scan_started_at'    => '2026-07-15 11:30:00',
+            'lha_content_scan_cursor' => '2026-07-01 00:00:00',
+            'lha_settings'           => array( 'batch_size' => 20 ),
+        );
+        $GLOBALS['lha_test_db_events'] = array();
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB();
+
+        $scanner = ( new ReflectionClass( LHA_Scanner::class ) )->newInstanceWithoutConstructor();
+        $queue_property = new ReflectionProperty( LHA_Scanner::class, 'queue' );
+        $queue_property->setAccessible( true );
+        $queue_property->setValue(
+            $scanner,
+            new LHA_Test_Token_Swapping_Queue(
+                array(
+                    'pending'    => 0,
+                    'processing' => 0,
+                    'done'       => 1,
+                    'failed'     => 0,
+                    'paused'     => 0,
+                )
+            )
+        );
+
+        $result = $scanner->process_queue_batch();
+
+        lha_assert_same( array( 'status' => 'running', 'processed' => 0 ), $result );
+        lha_assert_same( 'replacement-scan-token', $GLOBALS['lha_test_options']['lha_scan_token'] );
+        lha_assert_same( 'running', $GLOBALS['lha_test_options']['lha_scan_status'] );
+        lha_assert_same( '2026-07-01 00:00:00', $GLOBALS['lha_test_options']['lha_content_scan_cursor'] );
+        lha_assert_same( false, isset( $GLOBALS['lha_test_options']['lha_last_scan_time'] ) );
+        lha_assert_same( false, isset( $GLOBALS['lha_test_options']['lha_scan_state_lock'] ) );
+    }
+);
+
+lha_test(
     'queues every actionable issue for bounded background rechecking',
     static function(): void {
         $GLOBALS['lha_test_options'] = array( 'lha_scan_status' => 'completed' );
@@ -1337,6 +1598,65 @@ lha_test(
         lha_assert_same( array( 'status' => 'started', 'queued' => 2 ), $result );
         lha_assert_same( 'running', $GLOBALS['lha_test_options']['lha_scan_status'] );
         lha_assert_same( array( 'pending', 'pending', 'ok', 'dns_error' ), array_column( $GLOBALS['wpdb']->rows, 'status' ) );
+    }
+);
+
+lha_test(
+    'serializes upgrade rechecks without resuming paused scans',
+    static function(): void {
+        $rows = array(
+            array( 'id' => 1, 'status' => 'broken', 'is_ignored' => 0 ),
+            array( 'id' => 2, 'status' => 'ok', 'is_ignored' => 0 ),
+            array( 'id' => 3, 'status' => 'broken', 'is_ignored' => 1 ),
+        );
+
+        $GLOBALS['lha_test_options'] = array(
+            'lha_scan_status'         => 'paused',
+            'lha_scan_type'           => 'full',
+            'lha_scan_token'          => 'paused-upgrade-token',
+            'lha_content_scan_cursor' => '2026-07-01 00:00:00',
+            'lha_settings'            => array( 'email_notifications' => 1 ),
+        );
+        $GLOBALS['lha_test_transients'] = array( 'lha_pre_scan_broken_count' => 7 );
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB( $rows );
+
+        $paused_result = ( new LHA_Scanner() )->queue_all_links_for_recheck();
+
+        lha_assert_same( array( 'status' => 'paused', 'queued' => 2 ), $paused_result );
+        lha_assert_same( array( 'pending', 'pending', 'broken' ), array_column( $GLOBALS['wpdb']->rows, 'status' ) );
+        lha_assert_same( 'paused', get_option( 'lha_scan_status' ) );
+        lha_assert_same( 'full', get_option( 'lha_scan_type' ) );
+        lha_assert_same( 'paused-upgrade-token', get_option( 'lha_scan_token' ) );
+        lha_assert_same( '2026-07-01 00:00:00', get_option( 'lha_content_scan_cursor' ) );
+        lha_assert_same( 7, get_transient( 'lha_pre_scan_broken_count' ) );
+
+        $GLOBALS['lha_test_options'] = array(
+            'lha_scan_status'         => 'completed',
+            'lha_content_scan_cursor' => '2026-07-01 00:00:00',
+            'lha_settings'            => array( 'email_notifications' => 0 ),
+        );
+        $GLOBALS['lha_test_transients'] = array();
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB( $rows );
+
+        $started_result = ( new LHA_Scanner() )->queue_all_links_for_recheck();
+
+        lha_assert_same( array( 'status' => 'started', 'queued' => 2 ), $started_result );
+        lha_assert_same( 'running', get_option( 'lha_scan_status' ) );
+        lha_assert_same( 'recheck', get_option( 'lha_scan_type' ) );
+        lha_assert_same( '2026-07-01 00:00:00', get_option( 'lha_content_scan_cursor' ) );
+
+        $GLOBALS['lha_test_options']['lha_scan_status'] = 'completed';
+        $GLOBALS['lha_test_options']['lha_scan_state_lock'] = array(
+            'token'       => 'busy-upgrade-lock',
+            'acquired_at' => time(),
+        );
+        $GLOBALS['wpdb'] = new LHA_Test_WPDB( $rows );
+
+        lha_assert_same(
+            array( 'status' => 'busy', 'queued' => 0 ),
+            ( new LHA_Scanner() )->queue_all_links_for_recheck()
+        );
+        lha_assert_same( array( 'broken', 'ok', 'broken' ), array_column( $GLOBALS['wpdb']->rows, 'status' ) );
     }
 );
 
@@ -1537,14 +1857,86 @@ lha_test(
 );
 
 lha_test(
+    'replaces exact URL tokens without corrupting longer URLs',
+    static function(): void {
+        $method = new ReflectionMethod( LHA_Repair::class, 'replace_bounded_url' );
+        $method->setAccessible( true );
+
+        $old_url = 'https://example.com/bad';
+        $new_url = 'https://example.com/fixed';
+        $content = '<a href="' . $old_url . '">Exact</a>'
+            . '<a href="' . $old_url . 'ger">Longer word</a>'
+            . '<a href="' . $old_url . '/child">Child path</a>'
+            . '<!-- wp:button {"url":"' . $old_url . '"} -->';
+        $count = 0;
+        $args = array( $content, $old_url, $new_url, &$count );
+
+        $result = $method->invokeArgs( new LHA_Repair(), $args );
+
+        lha_assert_same( 2, $count );
+        lha_assert_same( true, str_contains( $result, 'href="' . $new_url . '"' ) );
+        lha_assert_same( true, str_contains( $result, '"url":"' . $new_url . '"' ) );
+        lha_assert_same( true, str_contains( $result, $old_url . 'ger' ) );
+        lha_assert_same( true, str_contains( $result, $old_url . '/child' ) );
+    }
+);
+
+lha_test(
+    'persists repair snapshots before content writes and preserves paused scans',
+    static function(): void {
+        $repair = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-repair.php' );
+        $db = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php' );
+        $queue = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php' );
+        $scanner = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
+
+        $replace_start = strpos( is_string( $repair ) ? $repair : '', 'public function replace_url(' );
+        $replace_end = strpos( is_string( $repair ) ? $repair : '', 'public function unlink(', (int) $replace_start );
+        $replace_section = false !== $replace_start && false !== $replace_end
+            ? substr( $repair, $replace_start, $replace_end - $replace_start )
+            : '';
+        $unlink_start = strpos( is_string( $repair ) ? $repair : '', 'public function unlink(' );
+        $unlink_end = strpos( is_string( $repair ) ? $repair : '', 'public function rollback(', (int) $unlink_start );
+        $unlink_section = false !== $unlink_start && false !== $unlink_end
+            ? substr( $repair, $unlink_start, $unlink_end - $unlink_start )
+            : '';
+        $rollback_section = false !== $unlink_end ? substr( $repair, $unlink_end ) : '';
+
+        foreach ( array( $replace_section, $unlink_section ) as $section ) {
+            $snapshot_position = strpos( $section, '$repair_id = $this->record_repair(' );
+            $write_position = strpos( $section, 'wp_update_post(' );
+            lha_assert_same(
+                true,
+                false !== $snapshot_position && false !== $write_position && $snapshot_position < $write_position
+            );
+            lha_assert_same( true, str_contains( $section, 'LHA_DB::delete_repair( $repair_id )' ) );
+        }
+
+        lha_assert_same( true, is_string( $db ) && str_contains( $db, 'public static function delete_repair(' ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'public function add_refresh(' ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, "status = 'pending' LIMIT 1" ) );
+        lha_assert_same( true, is_string( $queue ) && str_contains( $queue, '$this->add( $object_type, $object_id, $object_url, $priority, false )' ) );
+        lha_assert_same( false, str_contains( $rollback_section, "update_option( 'lha_scan_status', 'running' )" ) );
+        lha_assert_same( true, str_contains( $rollback_section, 'queue_repair_refresh(' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, 'public function queue_repair_refresh(' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, '$this->queue->add_refresh(' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "self::write_scan_start( 'repair' )" ) );
+    }
+);
+
+lha_test(
     'shares scan notification completion and fully cleans uninstall state',
     static function(): void {
         $admin     = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
         $cron      = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-cron.php' );
+        $scanner   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
         $uninstall = file_get_contents( dirname( __DIR__ ) . '/linkvitals/uninstall.php' );
 
-        lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::begin_notification_tracking( true )' ) );
+        lha_assert_same( false, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::begin_notification_tracking( true )' ) );
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::complete_notification_tracking()' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, 'LHA_Cron::begin_notification_tracking( true )' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, 'private static function acquire_scan_state_lock()' ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, "update_option( 'lha_scan_token', wp_generate_uuid4() )" ) );
+        lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, 'record_scan_completion( string $expected_token ): bool' ) );
         lha_assert_same( true, is_string( $cron ) && str_contains( $cron, 'add_option( self::NOTIFICATION_LOCK_OPTION' ) );
         lha_assert_same( true, is_string( $cron ) && str_contains( $cron, 'if ( wp_mail( $email, $subject, $body ) )' ) );
         lha_assert_same( true, is_string( $cron ) && str_contains( $cron, 'public static function reset_notification_tracking' ) );
@@ -1553,6 +1945,8 @@ lha_test(
         lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "'_transient_lha_ai_'" ) );
         lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "'_transient_timeout_lha_ai_'" ) );
         lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "delete_option( 'lha_content_scan_cursor' )" ) );
+        lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "delete_option( 'lha_scan_token' )" ) );
+        lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, "delete_option( 'lha_scan_state_lock' )" ) );
         lha_assert_same( false, is_string( $uninstall ) && str_contains( $uninstall, "if ( ! \$delete_data ) {\n    return;" ) );
     }
 );

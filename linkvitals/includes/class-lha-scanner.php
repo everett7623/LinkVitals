@@ -21,11 +21,14 @@ class LHA_Scanner {
     private const CONTENT_SCAN_TYPES = array( 'full', 'incremental' );
     private const DEFAULT_SCAN_CURSOR = '2000-01-01 00:00:00';
     private const SOURCE_PAGE_SIZE = 100;
+    private const SCAN_STATE_LOCK_OPTION = 'lha_scan_state_lock';
+    private const SCAN_STATE_LOCK_MINUTES = 15;
 
     private LHA_Queue $queue;
     private LHA_Link_Extractor $extractor;
     private LHA_Link_Checker $checker;
     private string $last_item_error = '';
+    private string $scan_state_lock_token = '';
 
     public function __construct() {
         $this->queue     = new LHA_Queue();
@@ -43,31 +46,51 @@ class LHA_Scanner {
      */
     public function start_full_scan(): array {
         $started_at = current_time( 'mysql' );
-
-        // Clear existing queue (Req 9.1).
-        $this->queue->clear();
-
-        $total_queued = 0;
-
-        // Queue all published posts from public post types, excluding attachments (Req 5.1, 5.6).
-        $post_types = $this->get_scannable_post_types();
-        $this->cleanup_stale_sources( $post_types );
-        foreach ( $post_types as $post_type ) {
-            $total_queued += $this->queue_posts( $post_type, null, false );
+        $lock_token = self::acquire_scan_state_lock();
+        if ( false === $lock_token ) {
+            return array( 'status' => 'already_running', 'total_queued' => 0 );
         }
 
-        // Queue nav menu custom link items (Req 5.2).
-        $total_queued += $this->queue_nav_menus( null, false );
+        $this->scan_state_lock_token = $lock_token;
 
-        // Queue taxonomy terms with non-empty descriptions (Req 5.3).
-        $total_queued += $this->queue_taxonomies( null, false );
+        try {
+            if ( self::is_scan_active() ) {
+                return array( 'status' => 'already_running', 'total_queued' => 0 );
+            }
 
-        self::record_scan_start( 'full', $started_at );
+            LHA_Cron::begin_notification_tracking( true );
 
-        return array(
-            'status'       => 'started',
-            'total_queued' => $total_queued,
-        );
+            // Clear existing queue (Req 9.1).
+            $this->queue->clear();
+
+            $total_queued = 0;
+
+            // Queue all published posts from public post types, excluding attachments (Req 5.1, 5.6).
+            $post_types = $this->get_scannable_post_types();
+            $this->cleanup_stale_sources( $post_types );
+            foreach ( $post_types as $post_type ) {
+                $total_queued += $this->queue_posts( $post_type, null, false );
+            }
+
+            // Queue nav menu custom link items (Req 5.2).
+            $total_queued += $this->queue_nav_menus( null, false );
+
+            // Queue taxonomy terms with non-empty descriptions (Req 5.3).
+            $total_queued += $this->queue_taxonomies( null, false );
+
+            self::write_scan_start( 'full', $started_at );
+
+            return array(
+                'status'       => 'started',
+                'total_queued' => $total_queued,
+            );
+        } catch ( \Throwable $error ) {
+            LHA_Cron::clear_notification_tracking();
+            throw $error;
+        } finally {
+            self::release_scan_state_lock( $lock_token );
+            $this->scan_state_lock_token = '';
+        }
     }
 
     /**
@@ -78,31 +101,53 @@ class LHA_Scanner {
      * @return array Scan start result.
      */
     public function start_incremental_scan(): array {
-        $last_scan  = self::get_content_scan_cursor();
         $started_at = current_time( 'mysql' );
-        $post_types = $this->get_scannable_post_types();
-        $this->cleanup_stale_sources( $post_types );
-
-        $total_queued = 0;
-
-        foreach ( $post_types as $post_type ) {
-            $total_queued += $this->queue_posts( $post_type, $last_scan );
+        $lock_token = self::acquire_scan_state_lock();
+        if ( false === $lock_token ) {
+            return array( 'status' => 'already_running', 'total_queued' => 0 );
         }
 
-        // Queue nav menus modified after last scan.
-        $total_queued += $this->queue_nav_menus( $last_scan );
+        $this->scan_state_lock_token = $lock_token;
 
-        // Queue taxonomy terms modified after last scan.
-        $total_queued += $this->queue_taxonomies( $last_scan );
+        try {
+            if ( self::is_scan_active() ) {
+                return array( 'status' => 'already_running', 'total_queued' => 0 );
+            }
 
-        if ( $total_queued > 0 ) {
-            self::record_scan_start( 'incremental', $started_at );
+            $last_scan = self::get_content_scan_cursor();
+            LHA_Cron::begin_notification_tracking( true );
+            $post_types = $this->get_scannable_post_types();
+            $this->cleanup_stale_sources( $post_types );
+
+            $total_queued = 0;
+
+            foreach ( $post_types as $post_type ) {
+                $total_queued += $this->queue_posts( $post_type, $last_scan );
+            }
+
+            // Queue nav menus modified after last scan.
+            $total_queued += $this->queue_nav_menus( $last_scan );
+
+            // Queue taxonomy terms modified after last scan.
+            $total_queued += $this->queue_taxonomies( $last_scan );
+
+            if ( $total_queued > 0 ) {
+                self::write_scan_start( 'incremental', $started_at );
+            } else {
+                LHA_Cron::clear_notification_tracking();
+            }
+
+            return array(
+                'status'       => $total_queued > 0 ? 'started' : 'no_new_content',
+                'total_queued' => $total_queued,
+            );
+        } catch ( \Throwable $error ) {
+            LHA_Cron::clear_notification_tracking();
+            throw $error;
+        } finally {
+            self::release_scan_state_lock( $lock_token );
+            $this->scan_state_lock_token = '';
         }
-
-        return array(
-            'status'       => $total_queued > 0 ? 'started' : 'no_new_content',
-            'total_queued' => $total_queued,
-        );
     }
 
     /**
@@ -114,14 +159,81 @@ class LHA_Scanner {
      * @return array Result with status and count of links queued for rechecking.
      */
     public function recheck_broken(): array {
-        $queued = LHA_DB::reset_issue_links_for_recheck();
-        if ( $queued < 1 ) {
-            return array( 'status' => 'no_broken_links', 'queued' => 0 );
+        $lock_token = self::acquire_scan_state_lock();
+        if ( false === $lock_token ) {
+            return array( 'status' => 'already_running', 'queued' => 0 );
         }
 
-        self::record_scan_start( 'recheck' );
+        try {
+            if ( self::is_scan_active() ) {
+                return array( 'status' => 'already_running', 'queued' => 0 );
+            }
 
-        return array( 'status' => 'started', 'queued' => $queued );
+            LHA_Cron::begin_notification_tracking( true );
+            $queued = LHA_DB::reset_issue_links_for_recheck();
+            if ( $queued < 1 ) {
+                LHA_Cron::clear_notification_tracking();
+                return array( 'status' => 'no_broken_links', 'queued' => 0 );
+            }
+
+            self::write_scan_start( 'recheck' );
+
+            return array( 'status' => 'started', 'queued' => $queued );
+        } catch ( \Throwable $error ) {
+            LHA_Cron::clear_notification_tracking();
+            throw $error;
+        } finally {
+            self::release_scan_state_lock( $lock_token );
+        }
+    }
+
+    /**
+     * Queue every non-ignored link for a version-upgrade recheck.
+     *
+     * Active scans retain their status and generation. Inactive sites start a
+     * dedicated recheck generation after the notification baseline is captured.
+     *
+     * @return array{status:string,queued:int}
+     */
+    public function queue_all_links_for_recheck(): array {
+        $lock_token = self::acquire_scan_state_lock();
+        if ( false === $lock_token ) {
+            return array( 'status' => 'busy', 'queued' => 0 );
+        }
+
+        try {
+            $active = self::is_scan_active();
+            if ( ! $active ) {
+                LHA_Cron::begin_notification_tracking( true );
+            }
+
+            $queued = LHA_DB::reset_links_for_recheck();
+            if ( false === $queued ) {
+                if ( ! $active ) {
+                    LHA_Cron::clear_notification_tracking();
+                }
+                return array( 'status' => 'failed', 'queued' => 0 );
+            }
+
+            if ( $queued < 1 ) {
+                if ( ! $active ) {
+                    LHA_Cron::clear_notification_tracking();
+                }
+                return array( 'status' => 'no_links', 'queued' => 0 );
+            }
+
+            if ( ! $active ) {
+                self::write_scan_start( 'recheck' );
+                return array( 'status' => 'started', 'queued' => $queued );
+            }
+
+            return array(
+                'status' => (string) get_option( 'lha_scan_status', 'running' ),
+                'queued' => $queued,
+            );
+        } finally {
+            self::release_scan_state_lock( $lock_token );
+        }
     }
 
     /**
@@ -144,8 +256,11 @@ class LHA_Scanner {
             return array( 'status' => $status, 'processed' => 0 );
         }
 
+        $scan_token = (string) get_option( 'lha_scan_token', '' );
         $settings   = get_option( 'lha_settings', array() );
-        $batch_size = isset( $settings['batch_size'] ) ? absint( $settings['batch_size'] ) : 20;
+        $batch_size = isset( $settings['batch_size'] )
+            ? min( 100, max( 1, absint( $settings['batch_size'] ) ) )
+            : 20;
 
         // Step 2: Reset stuck items (processing > 10 minutes).
         $this->queue->reset_stuck();
@@ -171,7 +286,12 @@ class LHA_Scanner {
 
             // All done — remove links without sources and mark completed (Req 8.7).
             LHA_DB::cleanup_orphaned_links();
-            $this->record_scan_completion();
+            if ( ! $this->record_scan_completion( $scan_token ) ) {
+                return array(
+                    'status'    => get_option( 'lha_scan_status', 'running' ),
+                    'processed' => 0,
+                );
+            }
             return array( 'status' => 'completed', 'processed' => 0 );
         }
 
@@ -538,12 +658,99 @@ class LHA_Scanner {
     }
 
     /**
+     * Queue one repaired post for occurrence refresh without advancing the
+     * completed content-scan cursor or resuming an explicitly paused scan.
+     */
+    public function queue_repair_refresh( string $object_type, int $object_id ): bool {
+        $object_type = sanitize_key( $object_type );
+        $object_id   = absint( $object_id );
+        if ( '' === $object_type || $object_id < 1 ) {
+            return false;
+        }
+
+        $lock_token = self::acquire_scan_state_lock();
+        if ( false === $lock_token ) {
+            return false;
+        }
+
+        try {
+            $queued = $this->queue->add_refresh( $object_type, $object_id, '', 1 );
+            if ( false === $queued ) {
+                return false;
+            }
+
+            if ( ! self::is_scan_active() ) {
+                self::write_scan_start( 'repair' );
+            }
+
+            return true;
+        } finally {
+            self::release_scan_state_lock( $lock_token );
+        }
+    }
+
+    /** Return whether a scan currently owns the shared queue pipeline. */
+    private static function is_scan_active(): bool {
+        return in_array( get_option( 'lha_scan_status', 'idle' ), array( 'running', 'paused' ), true );
+    }
+
+    /** Acquire the site-local mutex used for scan initialization and completion. */
+    private static function acquire_scan_state_lock(): string|false {
+        $token = wp_generate_uuid4();
+        $value = array(
+            'token'       => $token,
+            'acquired_at' => time(),
+        );
+
+        if ( add_option( self::SCAN_STATE_LOCK_OPTION, $value, '', false ) ) {
+            return $token;
+        }
+
+        $current     = get_option( self::SCAN_STATE_LOCK_OPTION, array() );
+        $acquired_at = is_array( $current ) ? (int) ( $current['acquired_at'] ?? 0 ) : 0;
+        if ( $acquired_at > time() - ( self::SCAN_STATE_LOCK_MINUTES * MINUTE_IN_SECONDS ) ) {
+            return false;
+        }
+
+        delete_option( self::SCAN_STATE_LOCK_OPTION );
+        return add_option( self::SCAN_STATE_LOCK_OPTION, $value, '', false ) ? $token : false;
+    }
+
+    /** Release the state mutex only when it is still owned by this request. */
+    private static function release_scan_state_lock( string $token ): void {
+        $current = get_option( self::SCAN_STATE_LOCK_OPTION, array() );
+        if ( is_array( $current ) && $token === (string) ( $current['token'] ?? '' ) ) {
+            delete_option( self::SCAN_STATE_LOCK_OPTION );
+        }
+    }
+
+    /** Keep a long queue-population request from being mistaken for a stale lock. */
+    private function refresh_scan_state_lock(): void {
+        if ( '' === $this->scan_state_lock_token ) {
+            return;
+        }
+
+        $current = get_option( self::SCAN_STATE_LOCK_OPTION, array() );
+        if ( ! is_array( $current ) || $this->scan_state_lock_token !== (string) ( $current['token'] ?? '' ) ) {
+            return;
+        }
+
+        $current['acquired_at'] = time();
+        update_option( self::SCAN_STATE_LOCK_OPTION, $current, false );
+    }
+
+    /**
      * Record the start of work that uses the shared scan pipeline.
      *
      * @param string      $scan_type  Full, incremental, recheck, or repair.
      * @param string|null $started_at Optional pre-queue timestamp for content scans.
      */
     public static function record_scan_start( string $scan_type, ?string $started_at = null ): void {
+        self::write_scan_start( $scan_type, $started_at );
+    }
+
+    /** Persist one new scan generation after its queue initialization succeeds. */
+    private static function write_scan_start( string $scan_type, ?string $started_at = null ): void {
         if ( false === get_option( 'lha_content_scan_cursor', false ) ) {
             $legacy_cursor = get_option( 'lha_last_scan_time', '' );
             if ( is_string( $legacy_cursor ) && '' !== $legacy_cursor ) {
@@ -553,6 +760,7 @@ class LHA_Scanner {
 
         update_option( 'lha_scan_started_at', $started_at ?: current_time( 'mysql' ) );
         update_option( 'lha_scan_type', $scan_type );
+        update_option( 'lha_scan_token', wp_generate_uuid4() );
         update_option( 'lha_scan_status', 'running' );
     }
 
@@ -566,17 +774,35 @@ class LHA_Scanner {
         return is_string( $cursor ) && '' !== $cursor ? $cursor : self::DEFAULT_SCAN_CURSOR;
     }
 
-    /** Mark shared pipeline work complete and safely promote content-scan state. */
-    private function record_scan_completion(): void {
-        $scan_type  = get_option( 'lha_scan_type', '' );
-        $started_at = get_option( 'lha_scan_started_at', '' );
-
-        if ( in_array( $scan_type, self::CONTENT_SCAN_TYPES, true ) && is_string( $started_at ) && '' !== $started_at ) {
-            update_option( 'lha_content_scan_cursor', $started_at );
+    /** Mark only the generation observed by this worker as complete. */
+    private function record_scan_completion( string $expected_token ): bool {
+        $lock_token = self::acquire_scan_state_lock();
+        if ( false === $lock_token ) {
+            return false;
         }
 
-        update_option( 'lha_last_scan_time', current_time( 'mysql' ) );
-        update_option( 'lha_scan_status', 'completed' );
+        try {
+            if ( 'running' !== get_option( 'lha_scan_status', 'idle' ) ) {
+                return false;
+            }
+
+            if ( $expected_token !== (string) get_option( 'lha_scan_token', '' ) ) {
+                return false;
+            }
+
+            $scan_type  = get_option( 'lha_scan_type', '' );
+            $started_at = get_option( 'lha_scan_started_at', '' );
+
+            if ( in_array( $scan_type, self::CONTENT_SCAN_TYPES, true ) && is_string( $started_at ) && '' !== $started_at ) {
+                update_option( 'lha_content_scan_cursor', $started_at );
+            }
+
+            update_option( 'lha_last_scan_time', current_time( 'mysql' ) );
+            update_option( 'lha_scan_status', 'completed' );
+            return true;
+        } finally {
+            self::release_scan_state_lock( $lock_token );
+        }
     }
 
     /**
@@ -623,6 +849,7 @@ class LHA_Scanner {
                 );
             }
             $count += $this->queue->add_many( $items, $check_existing );
+            $this->refresh_scan_state_lock();
 
             $args['paged']++;
         } while ( count( $post_ids ) === $args['posts_per_page'] );
@@ -661,6 +888,7 @@ class LHA_Scanner {
                     }
                 }
             }
+            $this->refresh_scan_state_lock();
         }
 
         return $this->queue->add_many( $queue_items, $check_existing );
@@ -716,6 +944,7 @@ class LHA_Scanner {
                 }
 
                 $count += $this->queue->add_many( $items, $check_existing );
+                $this->refresh_scan_state_lock();
                 $offset += self::SOURCE_PAGE_SIZE;
             } while ( count( $terms ) === self::SOURCE_PAGE_SIZE );
         }
@@ -726,22 +955,35 @@ class LHA_Scanner {
     /**
      * Pause scanning.
      *
-     * Sets the scan status to paused, preventing further batch processing (Req 8.8).
+     * Sets a running scan to paused, preventing further batch processing (Req 8.8).
+     *
+     * @return string The resulting scan status.
      */
-    public function pause(): void {
-        update_option( 'lha_scan_status', 'paused' );
+    public function pause(): string {
+        $status = (string) get_option( 'lha_scan_status', 'idle' );
+        if ( 'running' === $status ) {
+            update_option( 'lha_scan_status', 'paused' );
+            $status = (string) get_option( 'lha_scan_status', 'idle' );
+        }
+
+        return $status;
     }
 
     /**
      * Resume scanning.
      *
      * Resumes a paused scan by setting status back to running (Req 8.9).
+     *
+     * @return string The resulting scan status.
      */
-    public function resume(): void {
-        $status = get_option( 'lha_scan_status', 'idle' );
+    public function resume(): string {
+        $status = (string) get_option( 'lha_scan_status', 'idle' );
         if ( 'paused' === $status ) {
             update_option( 'lha_scan_status', 'running' );
+            $status = (string) get_option( 'lha_scan_status', 'idle' );
         }
+
+        return $status;
     }
 
     /**

@@ -41,6 +41,8 @@ function lha_uninstall_site_data() {
     delete_option( 'lha_last_scan_time' );
     delete_option( 'lha_scan_started_at' );
     delete_option( 'lha_scan_type' );
+    delete_option( 'lha_scan_token' );
+    delete_option( 'lha_scan_state_lock' );
     delete_option( 'lha_content_scan_cursor' );
     delete_option( 'lha_notification_lock' );
 

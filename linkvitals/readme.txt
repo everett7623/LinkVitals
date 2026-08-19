@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.30
+Stable tag: 0.3.35
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,32 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.35 =
+* Serializes version-upgrade link rechecks with scan initialization and completion state changes
+* Preserves paused scan status, scan generation, content cursor, and notification baseline when an upgrade joins active work
+* Captures inactive-scan notification baselines before resetting links and retries the version migration when recheck queueing is unsafe
+
+= 0.3.34 =
+* Queues repaired posts for background occurrence refresh after URL replacement, unlink, and rollback
+* Filters replacement previews to editable post sources whose current post type still matches the scan record
+* Preserves existing occurrences when a refresh cannot be queued and schedules follow-up work when a prior scan already claimed the same post
+
+= 0.3.33 =
+* Prevents URL repairs from changing longer URLs that only share the target prefix
+* Requires a durable repair-history snapshot before writing post content
+* Reports no-op repair attempts as failures and preserves explicitly paused scans during rollback
+
+= 0.3.32 =
+* Keeps AJAX batch processing from creating notification baselines when no scan is running
+* Restricts pause and resume to valid scan state transitions and reports the resulting state
+* Stops the admin client from polling indefinitely after a scan is paused or stopped
+
+= 0.3.31 =
+* Prevents overlapping full, incremental, and issue-recheck scans from clearing or replacing active work
+* Captures notification baselines inside the serialized scan-initialization path
+* Fences scan completion and content-cursor promotion to the worker's scan generation
+* Clamps corrupted runtime batch-size options before queue and link processing
 
 = 0.3.30 =
 * Loads taxonomy descriptions in deterministic pages of 100 terms during scan setup
@@ -335,6 +361,21 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.35 =
+Prevents version-upgrade rechecks from resuming paused scans, replacing active scan state, or treating existing issues as newly discovered.
+
+= 0.3.34 =
+Keeps link occurrences consistent with repaired post content through bounded background refreshes.
+
+= 0.3.33 =
+Hardens URL replacement and rollback so repairs remain bounded, reversible, and pause-aware.
+
+= 0.3.32 =
+Hardens pause, resume, and client-side batch controls so idle or completed scans cannot be reported as active work.
+
+= 0.3.31 =
+Hardens concurrent scan starts and completion state on sites with multiple admin or Cron workers.
 
 = 0.3.30 =
 Reduces scan-start memory usage on sites with large public taxonomies.
