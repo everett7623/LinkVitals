@@ -266,6 +266,11 @@ Recent cleanup already performed:
 - serialized version-upgrade all-link rechecks with scan state changes, preserved
   paused generations and notification baselines, and retained the old version
   marker so unsafe or failed queue attempts retry on the next admin request
+- separated activation provisioning from upgrade version commits so an
+  interrupted schema/default preparation or reactivation cannot suppress required
+  migration retries; only fresh installs commit the version during activation
+- made failed or lock-blocked upgrade requests leave `lha_version` untouched so a
+  concurrent successful request cannot have its committed version rolled back
 
 Known gaps:
 
@@ -292,6 +297,11 @@ apply those operations to every existing site. While network-active,
 `wp_initialize_site` provisions the same plugin state for newly created sites.
 Uninstall evaluates `delete_data_on_uninstall` independently on every site and
 only drops data where that setting is enabled.
+
+Fresh activation stores `LHA_VERSION`. Existing installations keep their prior
+`lha_version` marker while activation or `admin_init` provisions schema and
+defaults; `check_version()` commits the new marker only after required upgrade
+routines finish, so interrupted or lock-blocked upgrades retry safely.
 
 The scanning pipeline is orchestrated by `LHA_Scanner`:
 

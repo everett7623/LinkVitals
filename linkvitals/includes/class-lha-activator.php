@@ -20,19 +20,22 @@ class LHA_Activator {
      * Handles multisite network activation by looping through all sites.
      *
      * @param bool $network_wide Whether the plugin is being activated network-wide.
+     * @param bool $store_version Whether to commit the current plugin version.
      */
-    public static function activate( bool $network_wide = false ): void {
+    public static function activate( bool $network_wide = false, bool $store_version = true ): void {
         if ( is_multisite() && $network_wide ) {
-            self::activate_network();
+            self::activate_network( $store_version );
         } else {
-            self::activate_single_site();
+            self::activate_single_site( $store_version );
         }
     }
 
     /**
      * Activate plugin across all sites in a multisite network.
+     *
+     * @param bool $store_version Whether to commit the current plugin version.
      */
-    private static function activate_network(): void {
+    private static function activate_network( bool $store_version = true ): void {
         global $wpdb;
 
         // Get all site IDs in the network.
@@ -43,7 +46,7 @@ class LHA_Activator {
 
         foreach ( $site_ids as $site_id ) {
             switch_to_blog( $site_id );
-            self::activate_single_site();
+            self::activate_single_site( $store_version );
             restore_current_blog();
         }
     }
@@ -68,7 +71,7 @@ class LHA_Activator {
         }
 
         try {
-            self::activate_single_site();
+            self::activate_single_site( true );
         } finally {
             if ( $switched ) {
                 restore_current_blog();
@@ -78,14 +81,19 @@ class LHA_Activator {
 
     /**
      * Run activation routines for a single site.
+     *
+     * @param bool $store_version Whether to commit the current plugin version.
      */
-    private static function activate_single_site(): void {
+    private static function activate_single_site( bool $store_version = true ): void {
         self::create_tables();
         self::set_default_options();
         self::schedule_cron();
 
-        // Store version.
-        update_option( 'lha_version', LHA_VERSION );
+        // Fresh installs can commit immediately. Existing installations keep
+        // their prior marker until admin_init finishes required migrations.
+        if ( $store_version && false === get_option( 'lha_version', false ) ) {
+            add_option( 'lha_version', LHA_VERSION );
+        }
 
         // Set scan status to idle if not already set.
         if ( false === get_option( 'lha_scan_status' ) ) {

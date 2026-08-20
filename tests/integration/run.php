@@ -172,6 +172,34 @@ lha_integration_assert( class_exists( LHA_DB::class ), 'Plugin classes were not 
 lha_integration_assert( get_option( 'lha_version' ) === LHA_VERSION, 'Activation did not store the plugin version.' );
 lha_integration_assert( get_option( 'lha_scan_status' ) === 'idle', 'Activation did not initialize scan status.' );
 
+$pre_upgrade_version = '0.3.35';
+update_option( 'lha_version', $pre_upgrade_version );
+LHA_Activator::activate( false, false );
+lha_integration_assert(
+    $pre_upgrade_version === get_option( 'lha_version' ),
+    'Upgrade provisioning committed the new version before required routines completed.'
+);
+LHA_Activator::activate();
+lha_integration_assert(
+    $pre_upgrade_version === get_option( 'lha_version' ),
+    'Reactivation replaced the version marker before required upgrade routines completed.'
+);
+update_option(
+    'lha_scan_state_lock',
+    array(
+        'token'       => 'blocked-upgrade-fixture',
+        'acquired_at' => time(),
+    )
+);
+LinkVitals_Plugin::get_instance()->check_version();
+lha_integration_assert(
+    $pre_upgrade_version === get_option( 'lha_version' ),
+    'A blocked upgrade rewrote the version marker.'
+);
+delete_option( 'lha_scan_state_lock' );
+LinkVitals_Plugin::get_instance()->check_version();
+lha_integration_assert( LHA_VERSION === get_option( 'lha_version' ), 'A successful upgrade did not commit the current version.' );
+
 $settings = get_option( 'lha_settings', array() );
 lha_integration_assert( is_array( $settings ), 'Activation did not create plugin settings.' );
 lha_integration_assert( 20 === ( $settings['batch_size'] ?? null ), 'Activation defaults are incomplete.' );

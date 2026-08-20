@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.35
+Stable tag: 0.3.36
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,12 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.36 =
+* Separates activation provisioning from the version marker used to track upgrade completion
+* Keeps the previous version marker across provisioning and reactivation until required upgrade rechecks finish
+* Adds real WordPress coverage proving upgrade provisioning cannot prematurely commit the new version
+* Prevents a blocked concurrent upgrade request from reverting a version already committed by another request
 
 = 0.3.35 =
 * Serializes version-upgrade link rechecks with scan initialization and completion state changes
@@ -361,6 +367,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.36 =
+Makes interrupted upgrades retryable by committing the new version only after all required routines finish.
 
 = 0.3.35 =
 Prevents version-upgrade rechecks from resuming paused scans, replacing active scan state, or treating existing issues as newly discovered.

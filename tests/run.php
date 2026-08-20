@@ -1188,6 +1188,15 @@ lha_test(
         lha_assert_same( true, is_string( $integration ) && str_contains( $integration, '$incremental_logs_before + 2 === $incremental_logs_after' ) );
         lha_assert_same( true, is_string( $uninstall ) && str_contains( $uninstall, 'false === get_transient( $transient_name )' ) );
         lha_assert_same( true, is_string( $activator ) && str_contains( $activator, "add_filter( 'cron_schedules', array( LHA_Cron::class, 'add_schedules' ) )" ) );
+        lha_assert_same( true, is_string( $activator ) && str_contains( $activator, 'public static function activate( bool $network_wide = false, bool $store_version = true )' ) );
+        lha_assert_same( true, is_string( $activator ) && str_contains( $activator, "false === get_option( 'lha_version', false )" ) );
+        lha_assert_same( false, is_string( $activator ) && str_contains( $activator, "update_option( 'lha_version', LHA_VERSION )" ) );
+        lha_assert_same( true, is_string( $main ) && str_contains( $main, 'LHA_Activator::activate( false, false )' ) );
+        lha_assert_same( true, is_string( $main ) && str_contains( $main, 'if ( $upgraded )' ) );
+        lha_assert_same( false, is_string( $main ) && str_contains( $main, '$upgraded ? LHA_VERSION : $current_version' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'Upgrade provisioning committed the new version before required routines completed.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'Reactivation replaced the version marker before required upgrade routines completed.' ) );
+        lha_assert_same( true, is_string( $integration ) && str_contains( $integration, 'A blocked upgrade rewrote the version marker.' ) );
         lha_assert_same( true, is_string( $main ) && str_contains( $main, "add_action( 'wp_initialize_site', array( LHA_Activator::class, 'activate_new_site' ), 200 )" ) );
         lha_assert_same( true, is_string( $activator ) && str_contains( $activator, 'public static function activate_new_site( WP_Site $new_site )' ) );
         lha_assert_same( true, is_string( $activator ) && str_contains( $activator, 'active_sitewide_plugins' ) );

@@ -667,7 +667,18 @@ def check_scan_recheck_and_incremental(reporter: Reporter) -> None:
             "array( 'status' => 'failed', 'queued' => 0 )" in upgrade_section,
             "SELECT COUNT(*) FROM {$table} WHERE is_ignored = 0" in db_text,
             "( new LHA_Scanner() )->queue_all_links_for_recheck()" in read_text(MAIN),
-            "update_option( 'lha_version', $upgraded ? LHA_VERSION : $current_version )" in read_text(MAIN),
+            "if ( $upgraded )" in read_text(MAIN),
+            "$upgraded ? LHA_VERSION : $current_version" not in read_text(MAIN),
+            "LHA_Activator::activate( false, false )" in read_text(MAIN),
+            "public static function activate( bool $network_wide = false, bool $store_version = true )" in read_text(
+                PLUGIN / "includes" / "class-lha-activator.php"
+            ),
+            "false === get_option( 'lha_version', false )" in read_text(
+                PLUGIN / "includes" / "class-lha-activator.php"
+            ),
+            "update_option( 'lha_version', LHA_VERSION )" not in read_text(
+                PLUGIN / "includes" / "class-lha-activator.php"
+            ),
             "update_option( 'lha_scan_status', 'running' )" not in read_text(MAIN),
         )
     )
@@ -1008,6 +1019,9 @@ def check_ci_workflow(reporter: Reporter) -> None:
             "A no-op URL repair reported success." in integration_text,
             "A processing queue item suppressed the repaired post refresh." in integration_text,
             "An upgrade recheck resumed an explicitly paused scan." in integration_text,
+            "Upgrade provisioning committed the new version before required routines completed." in integration_text,
+            "Reactivation replaced the version marker before required upgrade routines completed." in integration_text,
+            "A blocked upgrade rewrote the version marker." in integration_text,
             "Replacement preview exposed an unsupported menu source." in integration_text,
             "$repair->unlink( $unlink_link_id, $unlink_post_id )" in integration_text,
             "The unlink did not preserve anchor text." in integration_text,
