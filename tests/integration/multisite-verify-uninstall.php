@@ -41,6 +41,7 @@ foreach ( array( 'delete', 'preserve' ) as $policy ) {
 
             if ( 'delete' === $policy ) {
                 lha_multisite_assert_uninstalled( false === get_option( 'lha_settings', false ), "Site {$site_id} settings remain." );
+                lha_multisite_assert_uninstalled( false === get_option( 'lha_upgrade_lock', false ), "Site {$site_id} upgrade lock remains." );
                 lha_multisite_assert_uninstalled( false === get_transient( 'lha_ai_job_multisite' ), "Site {$site_id} AI transient remains." );
             } else {
                 $settings = get_option( 'lha_settings', false );

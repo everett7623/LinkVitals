@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 6.7
 Requires PHP: 8.0
-Stable tag: 0.3.36
+Stable tag: 0.3.37
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,11 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.37 =
+* Serializes the complete version-upgrade transaction so concurrent admin requests cannot repeat the same migration
+* Re-reads the installed version after acquiring the upgrade mutex and releases only the lock owned by that request
+* Safely recovers expired upgrade locks and removes upgrade state during reset, deactivation, and uninstall
 
 = 0.3.36 =
 * Separates activation provisioning from the version marker used to track upgrade completion
@@ -367,6 +372,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.37 =
+Prevents concurrent admin requests from repeating the same version migration and safely recovers interrupted upgrade locks.
 
 = 0.3.36 =
 Makes interrupted upgrades retryable by committing the new version only after all required routines finish.

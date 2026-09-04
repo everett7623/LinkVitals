@@ -3,7 +3,7 @@
  * Plugin Name: LinkVitals – Link Health & SEO Auditor
  * Plugin URI: https://github.com/everett7623/LinkVitals
  * Description: Comprehensive link health audit plugin for WordPress. Detects broken links, redirects, timeouts, SSL errors, orphaned pages, and SEO link risks across posts, pages, menus, and custom post types.
- * Version: 0.3.36
+ * Version: 0.3.37
  * Requires at least: 6.4
  * Requires PHP: 8.0
  * Author: everettlabs
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 // Plugin constants
-define( 'LHA_VERSION', '0.3.36' );
+define( 'LHA_VERSION', '0.3.37' );
 define( 'LHA_PLUGIN_FILE', __FILE__ );
 define( 'LHA_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'LHA_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -57,6 +57,9 @@ register_deactivation_hook( __FILE__, array( 'LHA_Deactivator', 'deactivate' ) )
  * LinkVitals main plugin class - singleton pattern
  */
 final class LinkVitals_Plugin {
+
+    private const UPGRADE_LOCK_OPTION = 'lha_upgrade_lock';
+    private const UPGRADE_LOCK_MINUTES = 15;
 
     private static ?self $instance = null;
 
@@ -187,8 +190,24 @@ final class LinkVitals_Plugin {
      * Check if plugin version has changed and run upgrade routines
      */
     public function check_version(): void {
-        $current_version = get_option( 'lha_version', '0' );
-        if ( version_compare( $current_version, LHA_VERSION, '<' ) ) {
+        $current_version = (string) get_option( 'lha_version', '0' );
+        if ( ! version_compare( $current_version, LHA_VERSION, '<' ) ) {
+            return;
+        }
+
+        $lock_token = $this->acquire_upgrade_lock();
+        if ( false === $lock_token ) {
+            return;
+        }
+
+        try {
+            // Another request may have completed the upgrade while this one
+            // waited for the mutex, so decide from the authoritative marker.
+            $current_version = (string) get_option( 'lha_version', '0' );
+            if ( ! version_compare( $current_version, LHA_VERSION, '<' ) ) {
+                return;
+            }
+
             // Provision schema/default changes without committing the version
             // marker before all required upgrade routines finish.
             LHA_Activator::activate( false, false );
@@ -196,6 +215,50 @@ final class LinkVitals_Plugin {
             if ( $upgraded ) {
                 update_option( 'lha_version', LHA_VERSION );
             }
+        } finally {
+            $this->release_upgrade_lock( $lock_token );
+        }
+    }
+
+    /** Acquire the site-local mutex covering the complete version transaction. */
+    private function acquire_upgrade_lock(): string|false {
+        $token = wp_generate_uuid4();
+        $value = array(
+            'token'       => $token,
+            'acquired_at' => time(),
+        );
+
+        if ( add_option( self::UPGRADE_LOCK_OPTION, $value, '', false ) ) {
+            return $token;
+        }
+
+        $current     = get_option( self::UPGRADE_LOCK_OPTION, array() );
+        $acquired_at = is_array( $current ) ? (int) ( $current['acquired_at'] ?? 0 ) : 0;
+        if ( $acquired_at > time() - ( self::UPGRADE_LOCK_MINUTES * MINUTE_IN_SECONDS ) ) {
+            return false;
+        }
+
+        // Replace only the stale value that was observed. A plain
+        // delete_option() could delete a replacement lock won by another request.
+        global $wpdb;
+        $updated = $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s",
+                maybe_serialize( $value ),
+                self::UPGRADE_LOCK_OPTION,
+                maybe_serialize( $current )
+            )
+        );
+        wp_cache_delete( self::UPGRADE_LOCK_OPTION, 'options' );
+
+        return 1 === $updated ? $token : false;
+    }
+
+    /** Release the upgrade mutex only while this request still owns it. */
+    private function release_upgrade_lock( string $token ): void {
+        $current = get_option( self::UPGRADE_LOCK_OPTION, array() );
+        if ( is_array( $current ) && $token === (string) ( $current['token'] ?? '' ) ) {
+            delete_option( self::UPGRADE_LOCK_OPTION );
         }
     }
 

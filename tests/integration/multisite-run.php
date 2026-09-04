@@ -56,6 +56,7 @@ foreach ( $sites as $site ) {
         update_option( 'lha_settings', $settings );
         update_option( 'lha_scan_status', 'running' );
         update_option( 'lha_notification_lock', time() );
+        update_option( 'lha_upgrade_lock', array( 'token' => 'multisite-upgrade-fixture', 'acquired_at' => time() ) );
         wp_schedule_single_event( time() + HOUR_IN_SECONDS, 'lha_scheduled_scan' );
         wp_schedule_single_event( time() + HOUR_IN_SECONDS, 'lha_process_ai_orphan_job', array( 'integration-job' ) );
         set_transient( 'lha_pre_scan_broken_count', 1, HOUR_IN_SECONDS );

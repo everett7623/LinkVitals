@@ -1541,6 +1541,7 @@ class LHA_Admin {
         delete_option( 'lha_scan_type' );
         delete_option( 'lha_scan_token' );
         delete_option( 'lha_scan_state_lock' );
+        delete_option( 'lha_upgrade_lock' );
         delete_option( 'lha_content_scan_cursor' );
         delete_transient( 'lha_notice_check' );
         LHA_Cron::reset_notification_tracking();

@@ -40,6 +40,7 @@ foreach ( $site_ids as $site_id ) {
         lha_multisite_assert_deactivated( false === wp_next_scheduled( 'lha_scheduled_scan' ), "Site {$site_id} scheduled scan remains." );
         lha_multisite_assert_deactivated( ! lha_multisite_has_scheduled_hook( 'lha_process_ai_orphan_job' ), "Site {$site_id} AI Cron remains." );
         lha_multisite_assert_deactivated( false === get_option( 'lha_notification_lock', false ), "Site {$site_id} notification lock remains." );
+        lha_multisite_assert_deactivated( false === get_option( 'lha_upgrade_lock', false ), "Site {$site_id} upgrade lock remains." );
         lha_multisite_assert_deactivated( false === get_transient( 'lha_pre_scan_broken_count' ), "Site {$site_id} notification baseline remains." );
         lha_multisite_assert_deactivated( false !== get_transient( 'lha_ai_job_multisite' ), "Site {$site_id} AI fixture disappeared before uninstall." );
     } finally {

@@ -172,7 +172,7 @@ lha_integration_assert( class_exists( LHA_DB::class ), 'Plugin classes were not 
 lha_integration_assert( get_option( 'lha_version' ) === LHA_VERSION, 'Activation did not store the plugin version.' );
 lha_integration_assert( get_option( 'lha_scan_status' ) === 'idle', 'Activation did not initialize scan status.' );
 
-$pre_upgrade_version = '0.3.35';
+$pre_upgrade_version = '0.3.36';
 update_option( 'lha_version', $pre_upgrade_version );
 LHA_Activator::activate( false, false );
 lha_integration_assert(
@@ -184,6 +184,43 @@ lha_integration_assert(
     $pre_upgrade_version === get_option( 'lha_version' ),
     'Reactivation replaced the version marker before required upgrade routines completed.'
 );
+
+$version_reads = 0;
+$version_filter = static function( mixed $pre_option ) use ( &$version_reads, $pre_upgrade_version ): mixed {
+    $version_reads++;
+    if ( 1 === $version_reads ) {
+        update_option( 'lha_version', LHA_VERSION );
+        return $pre_upgrade_version;
+    }
+
+    return $pre_option;
+};
+add_filter( 'pre_option_lha_version', $version_filter );
+LinkVitals_Plugin::get_instance()->check_version();
+remove_filter( 'pre_option_lha_version', $version_filter );
+lha_integration_assert( $version_reads >= 2, 'The upgrade transaction did not re-read the version after locking.' );
+lha_integration_assert( LHA_VERSION === get_option( 'lha_version' ), 'A concurrent upgrade completion was not preserved.' );
+lha_integration_assert( false === get_option( 'lha_upgrade_lock', false ), 'The concurrent upgrade check left its mutex behind.' );
+
+update_option( 'lha_version', $pre_upgrade_version );
+update_option(
+    'lha_upgrade_lock',
+    array(
+        'token'       => 'active-upgrade-fixture',
+        'acquired_at' => time(),
+    )
+);
+LinkVitals_Plugin::get_instance()->check_version();
+lha_integration_assert(
+    $pre_upgrade_version === get_option( 'lha_version' ),
+    'A request bypassed an active upgrade transaction.'
+);
+lha_integration_assert(
+    'active-upgrade-fixture' === ( get_option( 'lha_upgrade_lock', array() )['token'] ?? '' ),
+    'A blocked request removed another upgrade transaction mutex.'
+);
+delete_option( 'lha_upgrade_lock' );
+
 update_option(
     'lha_scan_state_lock',
     array(
@@ -196,9 +233,18 @@ lha_integration_assert(
     $pre_upgrade_version === get_option( 'lha_version' ),
     'A blocked upgrade rewrote the version marker.'
 );
+lha_integration_assert( false === get_option( 'lha_upgrade_lock', false ), 'A failed upgrade left its mutex behind.' );
 delete_option( 'lha_scan_state_lock' );
+update_option(
+    'lha_upgrade_lock',
+    array(
+        'token'       => 'stale-upgrade-fixture',
+        'acquired_at' => time() - HOUR_IN_SECONDS,
+    )
+);
 LinkVitals_Plugin::get_instance()->check_version();
 lha_integration_assert( LHA_VERSION === get_option( 'lha_version' ), 'A successful upgrade did not commit the current version.' );
+lha_integration_assert( false === get_option( 'lha_upgrade_lock', false ), 'A recovered upgrade left its mutex behind.' );
 
 $settings = get_option( 'lha_settings', array() );
 lha_integration_assert( is_array( $settings ), 'Activation did not create plugin settings.' );
@@ -984,6 +1030,8 @@ lha_integration_assert( ! is_wp_error( $snapshot_update ), 'Could not restore th
 update_option( 'lha_scan_status', 'paused' );
 $rollback_result = $repair->rollback( $repair_id );
 lha_integration_assert( true === $rollback_result['success'], 'The guarded repair rollback failed.' );
+lha_integration_assert( true === $rollback_result['refresh_queued'], 'The rollback did not report a queued refresh.' );
+lha_integration_assert( 1 === lha_integration_pending_queue_count( 'post', $repair_post_id ), 'The rolled back post was not queued for refresh.' );
 lha_integration_assert( 'paused' === get_option( 'lha_scan_status' ), 'Repair rollback resumed an explicitly paused scan.' );
 lha_integration_assert(
     $repair_content === get_post( $repair_post_id )->post_content,
@@ -1019,6 +1067,7 @@ lha_integration_assert( $unlink_link_id > 0, 'Could not find the link to unlink.
 $unlink_result = $repair->unlink( $unlink_link_id, $unlink_post_id );
 lha_integration_assert( true === $unlink_result['success'], 'The unlink operation failed.' );
 lha_integration_assert( 2 === $unlink_result['unlinked'], 'The unlink count did not include duplicate occurrences.' );
+lha_integration_assert( 1 === lha_integration_pending_queue_count( 'post', $unlink_post_id ), 'The repaired post was not queued for refresh.' );
 $unlink_updated_content = (string) get_post( $unlink_post_id )->post_content;
 lha_integration_assert( str_contains( $unlink_updated_content, '<strong>Keep</strong> text' ), 'The unlink did not preserve anchor text.' );
 lha_integration_assert( str_contains( $unlink_updated_content, 'href="https://repair-unlink.example.test/keep"' ), 'The unlink changed an unmatched anchor.' );
@@ -1096,6 +1145,7 @@ update_option( 'lha_scan_started_at', '2026-07-21 12:00:00' );
 update_option( 'lha_scan_type', 'full' );
 update_option( 'lha_content_scan_cursor', '2026-07-20 12:00:00' );
 update_option( 'lha_notification_lock', time() );
+update_option( 'lha_upgrade_lock', array( 'token' => 'uninstall-fixture', 'acquired_at' => time() ) );
 set_transient( 'lha_broken_notice_shown', 1, HOUR_IN_SECONDS );
 set_transient( 'lha_notice_check', 1, HOUR_IN_SECONDS );
 set_transient( 'lha_pre_scan_broken_count', 1, HOUR_IN_SECONDS );

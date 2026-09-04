@@ -35,8 +35,11 @@ foreach (
         'lha_last_scan_time',
         'lha_scan_started_at',
         'lha_scan_type',
+        'lha_scan_token',
+        'lha_scan_state_lock',
         'lha_content_scan_cursor',
         'lha_notification_lock',
+        'lha_upgrade_lock',
     ) as $option_name
 ) {
     lha_integration_assert_removed( false === get_option( $option_name, false ), "Uninstall left {$option_name} behind." );

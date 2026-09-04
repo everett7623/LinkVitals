@@ -1933,6 +1933,60 @@ lha_test(
 );
 
 lha_test(
+    'serializes complete upgrade transactions with a recoverable owner lock',
+    static function(): void {
+        $main        = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
+        $admin       = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
+        $deactivator = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-deactivator.php' );
+        $uninstall   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/uninstall.php' );
+
+        lha_assert_same( true, is_string( $main ) );
+        $check_start = strpos( $main, 'public function check_version(): void' );
+        $check_end   = strpos( $main, 'private function acquire_upgrade_lock()', (int) $check_start );
+        $check       = false !== $check_start && false !== $check_end
+            ? substr( $main, $check_start, $check_end - $check_start )
+            : '';
+
+        $first_read = strpos( $check, "get_option( 'lha_version', '0' )" );
+        $lock       = strpos( $check, '$lock_token = $this->acquire_upgrade_lock();' );
+        $second_read = false !== $first_read
+            ? strpos( $check, "get_option( 'lha_version', '0' )", $first_read + 1 )
+            : false;
+        $provision = strpos( $check, 'LHA_Activator::activate( false, false );' );
+        $migrate   = strpos( $check, '$this->run_upgrade_routines( $current_version )' );
+        $commit    = strpos( $check, "update_option( 'lha_version', LHA_VERSION )" );
+        $release   = strpos( $check, '$this->release_upgrade_lock( $lock_token );' );
+
+        lha_assert_same(
+            true,
+            false !== $first_read
+                && false !== $lock
+                && false !== $second_read
+                && false !== $provision
+                && false !== $migrate
+                && false !== $commit
+                && false !== $release
+                && $first_read < $lock
+                && $lock < $second_read
+                && $second_read < $provision
+                && $provision < $migrate
+                && $migrate < $commit
+                && $commit < $release
+        );
+        lha_assert_same( true, str_contains( $main, "private const UPGRADE_LOCK_OPTION = 'lha_upgrade_lock';" ) );
+        lha_assert_same( true, str_contains( $main, 'add_option( self::UPGRADE_LOCK_OPTION, $value, \'\', false )' ) );
+        lha_assert_same( true, str_contains( $main, 'UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s' ) );
+        lha_assert_same( true, str_contains( $main, 'maybe_serialize( $current )' ) );
+        lha_assert_same( true, str_contains( $main, "wp_cache_delete( self::UPGRADE_LOCK_OPTION, 'options' )" ) );
+        lha_assert_same( true, str_contains( $main, '$token === (string) ( $current[\'token\'] ?? \'\' )' ) );
+
+        foreach ( array( $admin, $deactivator, $uninstall ) as $cleanup_source ) {
+            lha_assert_same( true, is_string( $cleanup_source ) && str_contains( $cleanup_source, "delete_option( 'lha_upgrade_lock' )" ) );
+        }
+    }
+);
+
+lha_test(
     'shares scan notification completion and fully cleans uninstall state',
     static function(): void {
         $admin     = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );

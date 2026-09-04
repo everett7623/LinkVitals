@@ -54,6 +54,7 @@ class LHA_Deactivator {
         update_option( 'lha_scan_status', 'idle' );
         delete_option( 'lha_scan_token' );
         delete_option( 'lha_scan_state_lock' );
+        delete_option( 'lha_upgrade_lock' );
         LHA_Cron::reset_notification_tracking();
     }
 }

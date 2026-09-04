@@ -657,6 +657,16 @@ def check_scan_recheck_and_incremental(reporter: Reporter) -> None:
     baseline_position = upgrade_section.find("LHA_Cron::begin_notification_tracking( true )")
     reset_position = upgrade_section.find("LHA_DB::reset_links_for_recheck()")
     start_position = upgrade_section.find("self::write_scan_start( 'recheck' )")
+    main_text = read_text(MAIN)
+    transaction_start = main_text.find("public function check_version(): void")
+    transaction_end = main_text.find("private function acquire_upgrade_lock()", transaction_start)
+    transaction_section = main_text[transaction_start:transaction_end]
+    first_version_read = transaction_section.find("get_option( 'lha_version', '0' )")
+    lock_position = transaction_section.find("$lock_token = $this->acquire_upgrade_lock();")
+    second_version_read = transaction_section.find("get_option( 'lha_version', '0' )", first_version_read + 1)
+    provision_position = transaction_section.find("LHA_Activator::activate( false, false )")
+    commit_position = transaction_section.find("update_option( 'lha_version', LHA_VERSION )")
+    release_position = transaction_section.find("$this->release_upgrade_lock( $lock_token )")
     upgrade_ok = all(
         (
             upgrade_start >= 0,
@@ -666,10 +676,28 @@ def check_scan_recheck_and_incremental(reporter: Reporter) -> None:
             "array( 'status' => 'busy', 'queued' => 0 )" in upgrade_section,
             "array( 'status' => 'failed', 'queued' => 0 )" in upgrade_section,
             "SELECT COUNT(*) FROM {$table} WHERE is_ignored = 0" in db_text,
-            "( new LHA_Scanner() )->queue_all_links_for_recheck()" in read_text(MAIN),
-            "if ( $upgraded )" in read_text(MAIN),
-            "$upgraded ? LHA_VERSION : $current_version" not in read_text(MAIN),
-            "LHA_Activator::activate( false, false )" in read_text(MAIN),
+            "( new LHA_Scanner() )->queue_all_links_for_recheck()" in main_text,
+            "if ( $upgraded )" in main_text,
+            "$upgraded ? LHA_VERSION : $current_version" not in main_text,
+            first_version_read >= 0,
+            lock_position > first_version_read,
+            second_version_read > lock_position,
+            provision_position > second_version_read,
+            commit_position > provision_position,
+            release_position > commit_position,
+            "private const UPGRADE_LOCK_OPTION = 'lha_upgrade_lock'" in main_text,
+            "add_option( self::UPGRADE_LOCK_OPTION, $value, '', false )" in main_text,
+            "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s" in main_text,
+            "maybe_serialize( $current )" in main_text,
+            "wp_cache_delete( self::UPGRADE_LOCK_OPTION, 'options' )" in main_text,
+            "$token === (string) ( $current['token'] ?? '' )" in main_text,
+            "delete_option( 'lha_upgrade_lock' )" in read_text(
+                PLUGIN / "includes" / "class-lha-admin.php"
+            ),
+            "delete_option( 'lha_upgrade_lock' )" in read_text(
+                PLUGIN / "includes" / "class-lha-deactivator.php"
+            ),
+            "delete_option( 'lha_upgrade_lock' )" in read_text(PLUGIN / "uninstall.php"),
             "public static function activate( bool $network_wide = false, bool $store_version = true )" in read_text(
                 PLUGIN / "includes" / "class-lha-activator.php"
             ),
@@ -679,13 +707,13 @@ def check_scan_recheck_and_incremental(reporter: Reporter) -> None:
             "update_option( 'lha_version', LHA_VERSION )" not in read_text(
                 PLUGIN / "includes" / "class-lha-activator.php"
             ),
-            "update_option( 'lha_scan_status', 'running' )" not in read_text(MAIN),
+            "update_option( 'lha_scan_status', 'running' )" not in main_text,
         )
     )
     if upgrade_ok:
-        reporter.ok("Upgrade rechecks are serialized, pause-aware, and retryable.")
+        reporter.ok("Upgrade transactions and rechecks are serialized, pause-aware, and retryable.")
     else:
-        reporter.fail("Upgrade rechecks must preserve active scan state and retry when queueing is unsafe.")
+        reporter.fail("Upgrade transactions must prevent duplicate migrations, preserve scan state, and retry safely.")
 
     taxonomy_start = scanner_text.find("private function queue_taxonomies(")
     taxonomy_end = scanner_text.find("* Pause scanning.", taxonomy_start)
@@ -925,6 +953,7 @@ def check_notifications_and_uninstall(reporter: Reporter) -> None:
             "delete_option( 'lha_scan_type' )" in uninstall_text,
             "delete_option( 'lha_scan_token' )" in uninstall_text,
             "delete_option( 'lha_scan_state_lock' )" in uninstall_text,
+            "delete_option( 'lha_upgrade_lock' )" in uninstall_text,
             "delete_option( 'lha_content_scan_cursor' )" in uninstall_text,
             "if ( ! $delete_data ) {\n    return;" not in uninstall_text,
         )
@@ -1022,6 +1051,11 @@ def check_ci_workflow(reporter: Reporter) -> None:
             "Upgrade provisioning committed the new version before required routines completed." in integration_text,
             "Reactivation replaced the version marker before required upgrade routines completed." in integration_text,
             "A blocked upgrade rewrote the version marker." in integration_text,
+            "The upgrade transaction did not re-read the version after locking." in integration_text,
+            "A request bypassed an active upgrade transaction." in integration_text,
+            "A blocked request removed another upgrade transaction mutex." in integration_text,
+            "A failed upgrade left its mutex behind." in integration_text,
+            "A recovered upgrade left its mutex behind." in integration_text,
             "Replacement preview exposed an unsupported menu source." in integration_text,
             "$repair->unlink( $unlink_link_id, $unlink_post_id )" in integration_text,
             "The unlink did not preserve anchor text." in integration_text,
@@ -1054,6 +1088,7 @@ def check_ci_workflow(reporter: Reporter) -> None:
             "$incremental_logs_before + 2 === $incremental_logs_after" in integration_text,
             "delete_data_on_uninstall" in integration_text,
             "Uninstall left {$table} behind." in uninstall_test_text,
+            "'lha_upgrade_lock'" in uninstall_test_text,
             "false === get_transient( $transient_name )" in uninstall_test_text,
             "add_filter( 'cron_schedules', array( LHA_Cron::class, 'add_schedules' ) )" in activator_text,
             "public static function add_schedules" in cron_text,
@@ -1082,6 +1117,9 @@ def check_ci_workflow(reporter: Reporter) -> None:
             "wp_next_scheduled( 'lha_process_queue' )" in multisite_deactivation_text,
             "lha_multisite_has_scheduled_hook" in multisite_deactivation_text,
             "lha_ai_job_multisite" in multisite_deactivation_text,
+            "lha_upgrade_lock" in multisite_text,
+            "lha_upgrade_lock" in multisite_deactivation_text,
+            "lha_upgrade_lock" in multisite_uninstall_text,
             "array( 'delete', 'preserve' )" in multisite_uninstall_text,
             "Uninstall removed retained table {$table}." in multisite_uninstall_text,
         )
