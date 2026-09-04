@@ -85,20 +85,23 @@ LinkVitals/
 
 ### Documentation
 
-- **[AGENTS.md](AGENTS.md)** - Complete development guide for AI coding assistants
-- **[CLAUDE.md](CLAUDE.md)** - Quick reference and command cheat sheet
+| Document | Audience | Covers |
+| --- | --- | --- |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | Branching, commits, PRs, and the release checklist |
+| [CLAUDE.md](CLAUDE.md) | AI coding assistants | Commands, architecture, and pitfalls in one pass |
+| [AGENTS.md](AGENTS.md) | Deep development | Full architecture, data model, settings, and design constraints |
+| [tools/README.md](tools/README.md) | Tooling | What each development script does and when to run it |
+| [references/](references/) | Post-mortems | Evidence and lessons from real defects already fixed |
+
+Run `python tools/stats.py` for current code, test, and documentation counts.
 
 ### Version Management
 
-When updating source code, synchronize version numbers in all 5 locations:
-
-1. `linkvitals/linkvitals.php` - `Version:` header
-2. `linkvitals/linkvitals.php` - `LHA_VERSION` constant
-3. `linkvitals/readme.txt` - `Stable tag`
-4. `linkvitals/readme.txt` - Top `Changelog` entry
-5. `linkvitals/readme.txt` - Top `Upgrade Notice` entry
-
-Run `python tools/dev-verify.py` to verify version consistency.
+Every accepted change must bump the plugin version, which is duplicated across
+five locations that must agree. The checklist lives in
+[CONTRIBUTING.md](CONTRIBUTING.md#版本发布流程); `python tools/check-version.py`
+verifies it, and `python tools/dev-verify.py` checks it along with everything
+else.
 
 ## Contributing
 

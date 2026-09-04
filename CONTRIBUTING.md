@@ -150,7 +150,7 @@ git push origin v0.x.x
 
 ## 测试
 
-### 单元测试
+### 合约测试
 
 ```bash
 # 运行依赖无关的 PHP 合约测试
@@ -159,9 +159,23 @@ php tests/run.php
 
 这些测试不需要 WordPress 环境。
 
+**⚠️ 重构前必读**：这些"测试"大多不是行为测试，而是**源码文本契约**。多数用例用
+`file_get_contents()` + `str_contains()` 断言源码里的字面文本——方法签名原文、SQL
+片段甚至其出现次数、调用点写法、集成测试的断言失败文案，以及 `.github/workflows/ci.yml`
+的内容。
+
+因此**重命名方法、调整参数顺序、改写 SQL、修改测试文案、改动 CI 配置，都会让测试失败，
+即使行为完全没变**。正确做法是同步更新 `tests/run.php` 和 `tools/dev-verify.py` 里对应
+的字面量，而不是回滚你的改动。反过来，这些测试通过也不代表运行时行为正确——真实行为
+验证靠集成测试。
+
+测试无法按名字过滤：用例通过 `lha_test( '名称', callable )` 注册后全量执行。要单独调试
+某个用例，临时注释掉其他 `lha_test(...)` 调用，或直接从输出里的 `[FAIL] <名称>` 定位。
+
 ### 集成测试
 
-集成测试在 GitHub Actions CI 中运行，需要真实的 WordPress 环境。
+集成测试在 GitHub Actions CI 中运行，需要真实的 WordPress + MySQL 环境，**本地无法直接
+执行**。改动 `tests/integration/` 后，只能靠推送到分支由 CI 验证。
 
 参见 `.github/workflows/ci.yml` 配置。
 

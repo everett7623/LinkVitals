@@ -104,173 +104,76 @@ The MVP and phase-two feature set is implemented in source:
   with encrypted settings and provider-neutral background jobs
 - maintenance AJAX tools for orphan cleanup, log purge, and data reset
 
-Recent cleanup already performed:
+Design constraints distilled from past fixes. These are load-bearing: each one
+encodes a bug that was already paid for once. The narrative history of how they
+came about lives in `git log`, not here.
 
-- rebranded the plugin and distribution identity as LinkVitals with the
-  `linkvitals` directory, main file, text domain, language files, and zip name
-- preserved `LHA_*` classes and all `lha_*` persisted/runtime identifiers so
-  existing scan data, settings, AJAX actions, and cron hooks remain compatible
-- removed Syncthing `.sync-conflict-*` files from `assets/`
-- changed occurrences so each actual link appearance gets its own row
-- fixed repair/unlink logger argument order and action names
-- fixed repair URL lookup to use normalized URL hashes
-- added logs for unignore and bulk ignore/unignore actions
-- rebuilt `linkvitals-zh_CN.mo` with `python generate-mo.py`
-- optimized report and CSV source lookups with batched occurrence summaries
-- fixed actionable issue totals so 404 links are not double-counted
-- added `tools/dev-verify.py` for lightweight no-WordPress development checks
-- added `tests/run.php` with dependency-free contract tests for URL
-  normalization, actionable issue totals, report filter sanitization, URL
-  resolution, link classification, duplicate occurrences, and srcset parsing
-- added `tools/i18n-sync.py` and catalog coverage checks for manual i18n
-- added report filters for aggregate issues, DNS errors, server errors, and
-  forbidden links
-- centralized issue statuses in `LHA_DB::get_issue_statuses()` so report
-  filters, notification totals, and rechecks stay aligned
-- issue totals are status-based only; 404/5xx code buckets are displayed as
-  secondary diagnostics and must not be added to actionable totals
-- report filter input is clamped with `LHA_DB::sanitize_report_filter_key()`
-  before querying or exporting
-- moved report bulk action handling before page output so confirmation
-  redirects and immediate list refreshes are reliable
-- hardened unlink repair so it only edits supported post-content objects and
-  handles `wp_update_post()` failures
-- fixed the Python `.mo` compiler so UTF-8 Chinese translations are preserved
-  instead of being decoded as `unicode_escape`
-- fixed plugin language selection so `zh_CN` is not lowercased on save and
-  existing `zh_cn` values still load the Chinese language pack
-- changed the plugin language default to `auto`, which follows the WordPress
-  site language (`zh*` loads Simplified Chinese; other locales use English)
-- added a legacy language migration so old saved `zh_CN` / `en_US` values
-  without an explicit manual-selection marker are reset to `auto` before the
-  textdomain loads
-- added repair history records for URL replacement and unlink actions, plus a
-  Logs-tab rollback button that refuses to run if the content changed afterward
-- added a repair history retention setting and maintenance action that purge
-  old rolled-back repair records while keeping active rollback snapshots
-- wired dashboard maintenance buttons for orphan cleanup, log purge, repair
-  history purge, and guarded data reset
-- added post-level `edit_post` capability checks before repair actions modify
-  source post content
-- made queue claims atomic with per-batch claim tokens and prevented scan
-  completion while another worker still owns queue items
-- added verified original-image recovery for internal 404 image-size URLs,
-  with one-click repair and sequential selected-row AJAX processing
-- made every dashboard statistic card a keyboard-accessible entry point to the
-  matching Links Report filter
-- added suggestion-only AI guidance for orphaned pages, using server-ranked
-  candidate IDs, structured provider output, and source-page edit links
-- moved AI provider calls into deduplicated WP-Cron jobs with stable polling
-  state and updated the default OpenAI/Claude model contracts
-- restricted internal-link source counts to matching published post
-  occurrences so taxonomy and menu IDs cannot collide with post IDs
-- scoped AI suggestion job deduplication and status polling to the initiating
-  administrator so edit links cannot cross permission contexts
-- changed issue rechecks to reset every actionable link into the bounded
-  background pipeline instead of synchronously checking only one batch
-- restored taxonomy-description processing during incremental scans
-- added scan-start cleanup for occurrences whose posts, custom menu items, or
-  taxonomy descriptions are no longer scannable
-- moved per-object occurrence deletion ahead of the empty-content return so
-  clearing content also clears its old link records
-- automatically removes link rows with no remaining occurrences at scan start
-  and after the queue and pending-link work are fully drained
-- unified AJAX and WP-Cron scan-completion notifications with a shared baseline
-  and short-lived option lock to prevent duplicate email
-- completed uninstall cleanup for current fixed transients, dynamic AI job
-  transients, notification locks, and per-site multisite settings
-- separated scan start and successful completion timestamps, and promoted the
-  start of the last completed content scan as the safe incremental cursor
-- prevented link-only rechecks and repair refreshes from advancing the content
-  scan cursor
-- added GitHub Actions coverage for PHP 8.0/8.3 lint and contracts, translation
-  synchronization, compiled catalogs, and release-package validation
-- added real WordPress activation, schema, queue-claim, security, and uninstall
-  smoke tests across the minimum and current WordPress test targets
-- registered the custom queue recurrence explicitly during activation so the
-  first `lha_process_queue` event is not rejected as an unknown schedule
-- expanded real WordPress tests across posts, taxonomy descriptions, and custom
-  menu links, including duplicate occurrences and stale-source cleanup
-- added real repair replacement and guarded rollback coverage, including refusal
-  when post content changes after the repair snapshot
-- provisioned plugin tables, defaults, and Cron state for sites created after
-  LinkVitals has been activated network-wide
-- changed network deactivation to stop Cron, scans, and notification state on
-  every site instead of only the current network-admin site
-- changed AI Cron cleanup to remove every argument variant instead of only
-  empty-argument events
-- added multisite integration coverage for pre-existing sites, newly created
-  sites, and mixed per-site uninstall retention settings
-- added a deterministic WordPress HTTP fixture that runs the real Cron scanner
-  through multiple bounded batches until completion
-- added real notification interception coverage proving AJAX/Cron completion
-  races consume one baseline and send/log exactly one email
-- added real pause/resume coverage proving WP-Cron leaves queue progress unchanged
-  while paused and drains the same queue after resume
-- added scheduled incremental coverage proving a no-change run preserves scan
-  timestamps and cursor state without email, baseline, or misleading start log
-- added consecutive changed-content incremental coverage proving only modified
-  posts are queued, a new issue sends once, and an unchanged existing issue does
-  not trigger another HTTP check or notification
-- added real queue retry coverage for pending transitions, persisted errors,
-  terminal failure after three attempts, and exclusion from future claims
-- added real stuck-claim recovery coverage proving only expired processing work
-  is reset and that reclaimed work receives a fresh claim token
-- delayed per-source occurrence replacement until extraction succeeds so a
-  transient parser failure preserves the last known-good scan result
-- added real mixed-batch scanner coverage proving successful objects finish
-  independently while extraction failures persist errors, retry, and terminate
-- fixed CI workflow compilation by using static runner temporary paths instead
-  of the unavailable job-level `runner` expression context
-- made stale post-occurrence cleanup compare post types as binary strings so
-  WordPress core and plugin tables may safely use different utf8mb4 collations
-- limited core checksum verification to fixed WordPress CI targets because the
-  latest release archive and checksum API can briefly drift during rollouts
-- added dependency-free settings boundary and SEO classification coverage,
-  including HTML whitespace in rel tokens and case-insensitive `_blank`
-- added dependency-free occurrence-cleanup SQL branch and unlink transformation
-  tests, plus real duplicate-occurrence unlink snapshot and rollback coverage
-- added property-style URL, extraction, queue-claim, and HTTP status boundary
-  coverage; fixed scheme-specific default ports and RFC-style relative paths
-- audited report and settings UI strings; translated SEO issue badges through
-  an explicit whitelist instead of exposing internal issue identifiers
-- verified the single-site integration suite against WordPress latest and PHP
-  8.3 in an isolated WordPress Playground SQLite environment
-- fenced queue completion and retry transitions with per-batch claim tokens,
-  preventing stale workers from overwriting work reclaimed by another worker
-- made queue retry transitions atomic and covered stale-worker rejection in the
-  real WordPress integration suite
-- collapsed dashboard and SEO summary counts into one aggregate query each,
-  with real WordPress comparisons against the previous count semantics
-- aligned queue claim indexing with status and priority ordering, and removed
-  redundant duplicate, permalink, term-link, and row-count work at full-scan startup
-- added bounded 100-row queue inserts for full scans while keeping incremental
-  and repair queue writes on the duplicate-aware path
-- paged public taxonomy descriptions by stable term ID in 100-term windows so
-  scan initialization does not load an entire large taxonomy at once
-- disabled unused post/term metadata cache priming during queue population
-- restricted pause and resume to valid running/paused state transitions and
-  made AJAX batch controls report and honor the authoritative scan state
-- bounded repair replacements to exact URL tokens, required rollback snapshots
-  before content writes, and preserved explicitly paused scans during rollback
-- serialized scan initialization so overlapping full, incremental, and issue-recheck starts cannot clear active queue work
-- moved scan notification-baseline capture into the serialized initialization path so concurrent starts cannot overwrite it
-- added scan-generation tokens that fence completion timestamps and incremental cursor promotion from stale workers
-- clamped runtime batch sizes before queue and pending-link processing even when stored options are corrupted
-- queued repaired posts for background occurrence refresh after replacement,
-  unlink, and rollback while preserving explicitly paused scan state
-- filtered replacement previews and repair writes against current post types and
-  edit permissions, and retained old occurrences when refresh queueing fails
-- ensured an already-processing queue item cannot suppress the post-edit refresh
-  needed to replace any stale occurrences it may write back
-- serialized version-upgrade all-link rechecks with scan state changes, preserved
-  paused generations and notification baselines, and retained the old version
-  marker so unsafe or failed queue attempts retry on the next admin request
-- separated activation provisioning from upgrade version commits so an
-  interrupted schema/default preparation or reactivation cannot suppress required
-  migration retries; only fresh installs commit the version during activation
-- made failed or lock-blocked upgrade requests leave `lha_version` untouched so a
-  concurrent successful request cannot have its committed version rolled back
+Reporting and statistics:
+
+- `LHA_DB::get_issue_statuses()` is the single source of truth for issue
+  statuses. Totals are status-based only. The 404/5xx code buckets are
+  secondary diagnostics and must never be added to actionable totals, or the
+  same link is counted twice.
+- Report filter input must pass through `LHA_DB::sanitize_report_filter_key()`
+  before it reaches a query or an export.
+- Report bulk actions must be handled before page output so confirmation
+  redirects and immediate list refreshes work.
+- Internal-link source counts must be restricted to matching published post
+  occurrences; taxonomy and menu object IDs can otherwise collide with post IDs.
+- SEO issue badges are translated through an explicit whitelist so internal
+  issue identifiers are never exposed in the UI.
+
+Scanning and queue:
+
+- Per-object occurrence deletion must happen before the empty-content return,
+  so clearing a post's content also clears its old link records.
+- Occurrence replacement is delayed until extraction succeeds; a transient
+  parser failure must preserve the last known-good result and retry.
+- Stale post-occurrence cleanup compares post types as binary strings, because
+  WordPress core tables and plugin tables may use different utf8mb4 collations.
+- Full scans use bounded 100-row queue inserts; incremental and repair writes
+  stay on the duplicate-aware path.
+- Public taxonomy descriptions are paged by stable term ID in 100-term windows
+  so initialization never loads an entire large taxonomy at once.
+- Runtime batch sizes are clamped before queue and pending-link processing even
+  when the stored option is corrupted.
+- Pause and resume are restricted to valid running/paused transitions, and AJAX
+  batch controls must report and honor the authoritative scan state.
+- Link rows with no remaining occurrences are removed at scan start and again
+  after queue and pending-link work fully drain.
+
+Activation and cron:
+
+- The custom queue recurrence must be registered explicitly during activation,
+  or the first `lha_process_queue` event is rejected as an unknown schedule.
+- AI cron cleanup must remove every argument variant, not just empty-argument
+  events.
+- Scan-completion notifications share one baseline and a short-lived option
+  lock across the AJAX and WP-Cron paths so exactly one email is sent.
+
+Repair safety:
+
+- Repair actions check the post-level `edit_post` capability before modifying
+  source post content, and only edit supported post-content objects.
+- Replacements are bounded to exact URL tokens so longer URLs sharing a prefix
+  are not corrupted.
+- A rollback snapshot must be persisted before any content write, and rollback
+  refuses to run when content changed after the snapshot.
+- Replacement previews and repair writes are filtered against current post
+  types and edit permissions; old occurrences are retained when refresh
+  queueing fails.
+- Repaired posts are queued for background occurrence refresh after
+  replacement, unlink, and rollback, while explicitly paused scans stay paused.
+
+AI:
+
+- AI job deduplication and status polling are scoped to the initiating
+  administrator so edit links cannot cross permission contexts.
+
+CI:
+
+- Core checksum verification is limited to fixed WordPress CI targets, because
+  the latest release archive and checksum API can briefly drift during rollouts.
 
 Known gaps:
 
@@ -301,7 +204,9 @@ only drops data where that setting is enabled.
 Fresh activation stores `LHA_VERSION`. Existing installations keep their prior
 `lha_version` marker while activation or `admin_init` provisions schema and
 defaults; `check_version()` commits the new marker only after required upgrade
-routines finish, so interrupted or lock-blocked upgrades retry safely.
+routines finish. `lha_upgrade_lock` serializes the entire version transaction,
+rechecks the installed marker after locking, recovers expired ownership with an
+atomic compare-and-swap, and is released only by its current owner.
 
 The scanning pipeline is orchestrated by `LHA_Scanner`:
 
@@ -434,6 +339,10 @@ finishes. Incremental scans use `lha_content_scan_cursor`, which is promoted
 from the start timestamp only after a full or incremental content scan
 completes; link-only rechecks and repair refreshes do not advance it.
 
+Upgrade state is separate: `lha_upgrade_lock` serializes provisioning, migration,
+and the final `lha_version` commit without conflating version ownership with scan
+pipeline ownership.
+
 ## Admin And AJAX
 
 The admin page is under Tools:
@@ -538,7 +447,9 @@ Good next tasks:
   time. If a bad zip was installed with an extra outer folder, the admin delete
   action may leave that outer folder behind; remove the stale outer folder from
   `wp-content/plugins/` manually after confirming the active plugin is gone.
-- `CLAUDE.md` is legacy assistant guidance; `AGENTS.md` is the Codex guide.
+- `CLAUDE.md` is the short daily reference; `AGENTS.md` is this complete guide.
+  Both are current and both are maintained. Keep them consistent when
+  architecture, workflows, settings, or release steps change.
 - `.sync-conflict-*` files in `assets/` are Syncthing artifacts and should not
   be treated as source.
 - `LHA_AI` is optional and should fail gracefully when no provider key is set.
