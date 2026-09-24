@@ -943,6 +943,11 @@ lha_integration_assert(
     'Rescanning did not store the updated menu occurrence.'
 );
 
+// Close the manually-driven scan before stale-source coverage: the active
+// scan gate correctly refuses to restart a running scan, so reset the status
+// the way completed scans leave it.
+update_option( 'lha_scan_status', 'completed' );
+
 $draft_update = wp_update_post( array( 'ID' => $post_id, 'post_status' => 'draft' ), true );
 lha_integration_assert( ! is_wp_error( $draft_update ), 'Could not unpublish the post fixture.' );
 $scanner->start_full_scan();
