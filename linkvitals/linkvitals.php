@@ -249,7 +249,11 @@ final class LinkVitals_Plugin {
                 maybe_serialize( $current )
             )
         );
+        // Invalidate both cache locations: an autoloaded lock row is served
+        // from the alloptions cache, and a stale cached token would make
+        // release_upgrade_lock() refuse to free the recovered mutex.
         wp_cache_delete( self::UPGRADE_LOCK_OPTION, 'options' );
+        wp_cache_delete( 'alloptions', 'options' );
 
         return 1 === $updated ? $token : false;
     }

@@ -103,6 +103,7 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Exports complete CSV reports in bounded batches so sites with more than 10,000 matching links are no longer silently truncated
 * Neutralizes spreadsheet formula injection in exported cells and orders link queries with a stable ID tiebreaker for consistent paging
 * Refuses to store AI provider keys when the site has no AUTH_KEY secret, showing the reason on the settings page instead of encrypting with a bundled salt
+* Frees a recovered upgrade mutex even when the lock row is served from the autoloaded options cache
 * Handles empty last-checked values in the links report and marks the plugin tested with WordPress 7.1
 
 = 0.3.37 =

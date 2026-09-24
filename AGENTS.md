@@ -217,7 +217,11 @@ Fresh activation stores `LHA_VERSION`. Existing installations keep their prior
 defaults; `check_version()` commits the new marker only after required upgrade
 routines finish. `lha_upgrade_lock` serializes the entire version transaction,
 rechecks the installed marker after locking, recovers expired ownership with an
-atomic compare-and-swap, and is released only by its current owner.
+atomic compare-and-swap, and is released only by its current owner. The CAS
+recovery writes the options table directly, so it must invalidate both the
+individual option cache and the `alloptions` cache; an autoloaded lock row
+served from a stale `alloptions` entry would make the owner mismatch and the
+recovered mutex would never be released.
 
 The scanning pipeline is orchestrated by `LHA_Scanner`:
 

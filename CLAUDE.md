@@ -73,7 +73,7 @@ python tools/dev-verify.py --require-release-zip
 | `claim_token` | `lha_queue` 行字段 | 每批次领取令牌。完成/重试转换都带令牌校验，阻止过期 worker 覆盖已被他人重新领取的任务 |
 | `lha_scan_token` | option | 扫描代际令牌。防止旧 worker 写入新一轮扫描的完成时间和增量游标 |
 | `lha_scan_state_lock` | option | 串行化扫描初始化与完成状态转换，防止 full/incremental/recheck 并发启动互相清空队列 |
-| `lha_upgrade_lock` | option | 带 owner token 的升级互斥，加锁后重读 `lha_version`，支持过期恢复的 CAS，只有持有者能释放 |
+| `lha_upgrade_lock` | option | 带 owner token 的升级互斥，加锁后重读 `lha_version`，支持过期恢复的 CAS（CAS 直写 options 表后必须同时失效 `options` 和 `alloptions` 两处缓存，否则 autoload 的锁行会让释放方读到旧 token 而拒绝释放），只有持有者能释放 |
 
 关键不变量：只有**全新安装**在激活时提交 `lha_version`；已有安装保留旧版本标记，直到升级例程成功才提交，失败/被锁则保持不变以便下次重试。
 
