@@ -194,6 +194,17 @@ class LHA_Settings {
             $submitted   = isset( $input[ $field ] ) ? sanitize_text_field( (string) $input[ $field ] ) : '';
             $stored_key  = (string) ( $old_settings[ $field ] ?? '' );
             $encrypted   = '' !== $submitted ? LHA_AI::encrypt( $submitted ) : '';
+            if ( '' !== $submitted && '' === $encrypted ) {
+                add_settings_error(
+                    'lha_settings',
+                    'lha_ai_key_' . $provider . '_not_saved',
+                    sprintf(
+                        /* translators: %s: AI provider name, OpenAI or Anthropic. */
+                        __( 'The %s API key was not saved because this site is missing the AUTH_KEY constant in wp-config.php.', 'linkvitals' ),
+                        'openai' === $provider ? 'OpenAI' : 'Anthropic'
+                    )
+                );
+            }
             $sanitized[ $field ] = '' !== $encrypted ? $encrypted : $stored_key;
         }
 

@@ -416,10 +416,11 @@ class LHA_List_Table extends WP_List_Table {
      * Last checked column
      */
     public function column_last_checked( $item ): string {
-        if ( $item['last_checked'] === '0000-00-00 00:00:00' ) {
+        $last_checked = (string) ( $item['last_checked'] ?? '' );
+        if ( '' === $last_checked || '0000-00-00 00:00:00' === $last_checked ) {
             return esc_html__( 'Never', 'linkvitals' );
         }
-        return esc_html( human_time_diff( strtotime( $item['last_checked'] ) ) . ' ' . __( 'ago', 'linkvitals' ) );
+        return esc_html( human_time_diff( strtotime( $last_checked ) ) . ' ' . __( 'ago', 'linkvitals' ) );
     }
 
     /**

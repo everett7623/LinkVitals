@@ -571,7 +571,9 @@ class LHA_DB {
         $per_page = absint( $args['per_page'] );
         $offset   = absint( $args['offset'] );
 
-        $query    = "SELECT l.* FROM {$table_links} l WHERE {$where_sql} ORDER BY {$orderby} {$order} LIMIT %d OFFSET %d";
+        // Deterministic tiebreaker keeps paged and exported windows stable
+        // when many rows share the same sort value.
+        $query    = "SELECT l.* FROM {$table_links} l WHERE {$where_sql} ORDER BY {$orderby} {$order}, l.id {$order} LIMIT %d OFFSET %d";
         $values[] = $per_page;
         $values[] = $offset;
 

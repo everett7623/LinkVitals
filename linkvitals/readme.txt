@@ -2,9 +2,9 @@
 Contributors: everettlabs
 Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
-Tested up to: 6.7
+Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 0.3.37
+Stable tag: 0.3.38
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,12 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.38 =
+* Exports complete CSV reports in bounded batches so sites with more than 10,000 matching links are no longer silently truncated
+* Neutralizes spreadsheet formula injection in exported cells and orders link queries with a stable ID tiebreaker for consistent paging
+* Refuses to store AI provider keys when the site has no AUTH_KEY secret, showing the reason on the settings page instead of encrypting with a bundled salt
+* Handles empty last-checked values in the links report and marks the plugin tested with WordPress 7.1
 
 = 0.3.37 =
 * Serializes the complete version-upgrade transaction so concurrent admin requests cannot repeat the same migration
@@ -372,6 +378,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.38 =
+Completes CSV exports on large sites, hardens AI key storage, and marks the plugin tested with WordPress 7.1.
 
 = 0.3.37 =
 Prevents concurrent admin requests from repeating the same version migration and safely recovers interrupted upgrade locks.

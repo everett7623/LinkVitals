@@ -480,7 +480,7 @@ class LHA_Admin {
                 wp_die( esc_html__( 'Security check failed.', 'linkvitals' ) );
             }
 
-            $posted_ids = isset( $_POST['link_ids'] ) ? array_map( 'absint', (array) $_POST['link_ids'] ) : array();
+            $posted_ids = isset( $_POST['link_ids'] ) ? array_map( 'absint', (array) wp_unslash( $_POST['link_ids'] ) ) : array();
             $repair     = new LHA_Repair();
             $total_done = 0;
 

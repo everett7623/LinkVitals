@@ -2,7 +2,7 @@
 # This file is distributed under the same license as the LinkVitals package.
 msgid ""
 msgstr ""
-"Project-Id-Version: LinkVitals 0.3.37\n"
+"Project-Id-Version: LinkVitals 0.3.38\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/linkvitals\n"
 "POT-Creation-Date: 2026-07-15 00:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
@@ -1487,4 +1487,10 @@ msgstr ""
 
 #: includes/class-lha-repair.php:640
 msgid "The repair source no longer matches the current post type."
+msgstr ""
+
+# Source strings synced by tools/i18n-sync.py
+
+#: includes/class-lha-settings.php:203
+msgid "The %s API key was not saved because this site is missing the AUTH_KEY constant in wp-config.php."
 msgstr ""

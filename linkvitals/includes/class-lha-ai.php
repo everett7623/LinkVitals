@@ -104,9 +104,12 @@ class LHA_AI {
         if ( empty( $value ) ) {
             return '';
         }
-        // Use WordPress AUTH_KEY as encryption salt
-        $salt = defined( 'AUTH_KEY' ) ? AUTH_KEY : 'lha_fallback_salt_32chars_here!';
-        $key  = hash( 'sha256', $salt, true );
+        // Refuse to encrypt without a site-specific secret: a bundled salt
+        // would be public in the plugin source and defeat the encryption.
+        if ( ! defined( 'AUTH_KEY' ) || '' === AUTH_KEY ) {
+            return '';
+        }
+        $key = hash( 'sha256', AUTH_KEY, true );
         try {
             $iv = random_bytes( 16 );
         } catch ( Throwable ) {
@@ -126,9 +129,11 @@ class LHA_AI {
         if ( empty( $encrypted ) ) {
             return '';
         }
+        if ( ! defined( 'AUTH_KEY' ) || '' === AUTH_KEY ) {
+            return '';
+        }
         try {
-            $salt    = defined( 'AUTH_KEY' ) ? AUTH_KEY : 'lha_fallback_salt_32chars_here!';
-            $key     = hash( 'sha256', $salt, true );
+            $key     = hash( 'sha256', AUTH_KEY, true );
             $decoded = base64_decode( $encrypted, true );
             if ( $decoded === false || strlen( $decoded ) < 17 ) {
                 return '';

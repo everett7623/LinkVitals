@@ -17,9 +17,10 @@ class LHA_Exporter {
     /**
      * Export links as CSV file download.
      *
-     * Queries all matching links (no pagination), retrieves the first occurrence
-     * for each link to populate source context columns, and streams a CSV file
-     * with proper HTTP headers for browser download.
+     * Streams every matching link in bounded batches regardless of total
+     * size, retrieves the first occurrence for each link to populate
+     * source context columns, and sends a CSV file with proper HTTP
+     * headers for browser download.
      *
      * @param array $filters {
      *     Optional. Filters matching the report view.
@@ -43,18 +44,6 @@ class LHA_Exporter {
         );
 
         $filters = wp_parse_args( $filters, $defaults );
-
-        // Get all matching links without pagination for export.
-        $args = array(
-            'status'   => $filters['status'],
-            'search'   => $filters['search'],
-            'orderby'  => $filters['orderby'],
-            'order'    => $filters['order'],
-            'per_page' => 10000,
-            'offset'   => 0,
-        );
-
-        $data = LHA_DB::get_links( $args );
 
         // Build filename with site name and date.
         $site_name = sanitize_file_name( get_bloginfo( 'name' ) );
@@ -90,30 +79,70 @@ class LHA_Exporter {
             'last_checked',
         ) );
 
-        $occurrence_summaries = LHA_DB::get_occurrence_summaries(
-            array_map( 'absint', array_column( $data['items'], 'id' ) )
-        );
+        // Export in bounded batches so reports larger than one query window
+        // are streamed completely instead of being silently truncated.
+        $batch_size = 1000;
+        $offset     = 0;
 
-        // Data rows.
-        foreach ( $data['items'] as $link ) {
-            $first_occurrence = $occurrence_summaries[ (int) $link['id'] ] ?? array();
+        do {
+            if ( function_exists( 'set_time_limit' ) ) {
+                @set_time_limit( 300 );
+            }
 
-            fputcsv( $output, array(
-                $link['status'] ?? '',
-                $link['url'] ?? '',
-                $link['link_type'] ?? '',
-                $first_occurrence['source_title'] ?? '',
-                $first_occurrence['object_type'] ?? '',
-                $first_occurrence['edit_url'] ?? '',
-                $first_occurrence['anchor_text'] ?? '',
-                $link['http_code'] ?? '',
-                $link['error_type'] ?? '',
-                $link['final_url'] ?? '',
-                $link['last_checked'] ?? '',
+            $data = LHA_DB::get_links( array(
+                'status'   => $filters['status'],
+                'search'   => $filters['search'],
+                'orderby'  => $filters['orderby'],
+                'order'    => $filters['order'],
+                'per_page' => $batch_size,
+                'offset'   => $offset,
             ) );
-        }
+
+            $occurrence_summaries = LHA_DB::get_occurrence_summaries(
+                array_map( 'absint', array_column( $data['items'], 'id' ) )
+            );
+
+            foreach ( $data['items'] as $link ) {
+                $first_occurrence = $occurrence_summaries[ (int) $link['id'] ] ?? array();
+
+                fputcsv( $output, array(
+                    self::guard_cell( $link['status'] ?? '' ),
+                    self::guard_cell( $link['url'] ?? '' ),
+                    self::guard_cell( $link['link_type'] ?? '' ),
+                    self::guard_cell( $first_occurrence['source_title'] ?? '' ),
+                    self::guard_cell( $first_occurrence['object_type'] ?? '' ),
+                    self::guard_cell( $first_occurrence['edit_url'] ?? '' ),
+                    self::guard_cell( $first_occurrence['anchor_text'] ?? '' ),
+                    $link['http_code'] ?? '',
+                    self::guard_cell( $link['error_type'] ?? '' ),
+                    self::guard_cell( $link['final_url'] ?? '' ),
+                    self::guard_cell( $link['last_checked'] ?? '' ),
+                ) );
+            }
+
+            $offset += $batch_size;
+        } while ( count( $data['items'] ) === $batch_size );
 
         fclose( $output );
         exit;
+    }
+
+    /**
+     * Neutralize spreadsheet formula injection in a CSV cell.
+     *
+     * Anchor text, titles, and URLs originate from site content that
+     * lower-privileged authors can influence. Prefixing cells that start
+     * with formula control characters with an apostrophe keeps the export
+     * inert when opened in Excel or Google Sheets.
+     *
+     * @param mixed $value Raw cell value.
+     * @return string Cell value safe for spreadsheet consumption.
+     */
+    private static function guard_cell( $value ): string {
+        $value = (string) $value;
+        if ( '' !== $value && false !== strpbrk( $value[0], "=+-@\t\r" ) ) {
+            return "'" . $value;
+        }
+        return $value;
     }
 }

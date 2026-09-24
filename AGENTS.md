@@ -28,6 +28,8 @@ root is a development and packaging workspace.
   release-package validation for pushes and pull requests.
 - `generate-mo.php` and `generate-mo.py` - compile `.po` translations to `.mo`.
 - `linkvitals.zip` - WordPress-uploadable release artifact.
+- `SUBMITTING.md` - maintainer runbook for the WordPress.org plugin
+  directory submission, review, and SVN publishing workflow.
 
 Do not edit files inside release zips. Edit plugin source under
 `linkvitals/`, then rebuild release artifacts only when packaging.
@@ -116,6 +118,11 @@ Reporting and statistics:
   same link is counted twice.
 - Report filter input must pass through `LHA_DB::sanitize_report_filter_key()`
   before it reaches a query or an export.
+- CSV export streams rows in bounded 1000-row batches; a single-query export
+  cap silently truncates large reports. Cells are neutralized against
+  spreadsheet formula injection by `LHA_Exporter::guard_cell()`, and
+  `LHA_DB::get_links()` orders with an `l.id` tiebreaker so batched windows
+  stay stable.
 - Report bulk actions must be handled before page output so confirmation
   redirects and immediate list refreshes work.
 - Internal-link source counts must be restricted to matching published post
@@ -167,6 +174,10 @@ Repair safety:
 
 AI:
 
+- AI provider keys are encrypted only when the site defines `AUTH_KEY`.
+  Without it, settings surface an error and keep the previously stored key;
+  encrypting with a bundled salt is forbidden because plugin source is
+  public on WordPress.org.
 - AI job deduplication and status polling are scoped to the initiating
   administrator so edit links cannot cross permission contexts.
 

@@ -49,7 +49,7 @@ python tools/dev-verify.py --require-release-zip
 
 后果：**重命名方法、调整参数顺序、改写 SQL、修改测试文案、改动 CI 配置，都会让"测试"失败——即使行为完全没变。** 修复方式是同步更新 `tests/run.php` / `tools/dev-verify.py` 里对应的字面量，而不是把改动回滚。反过来，这些"测试"通过也**不代表运行时行为正确**，真实行为验证靠 `tests/integration/`。
 
-> 当前工作区存在一个既有失败用例：`wires CI for supported PHP versions and release validation`。
+另一个隐蔽契约：翻译 catalog 头部的 `Project-Id-Version: LinkVitals <版本>` 必须跟随 `LHA_VERSION`（`i18n-sync.py` 不会自动更新它），否则 `keeps release metadata tied to the plugin version` 用例失败。
 
 ## 架构要点
 
@@ -85,8 +85,12 @@ python tools/dev-verify.py --require-release-zip
 ### 问题统计口径
 统计只按 **status** 计算（`LHA_DB::get_issue_statuses()` 是唯一真源）。404/5xx 等 code 分桶只作为次要诊断展示，**不得**计入 actionable 总数，否则会重复计数。报表筛选键先经 `LHA_DB::sanitize_report_filter_key()` 收敛。
 
+CSV 导出按 1000 行分批流式写出（单次查询上限会静默截断大报表），单元格过 `LHA_Exporter::guard_cell()` 中和表格公式注入，`get_links()` 的 ORDER BY 带 `l.id` 裁决字段保证分页窗口稳定。
+
 ### AI 旁路
 AI 建议独立于扫描流水线：admin 投递一个 `lha_process_ai_orphan_job` 单次事件 → transient 支撑的稳定状态轮询 → 最多展示 3 条建议。`LHA_AI_Internal` 只发送最多 10 条标题/摘要上下文，并**丢弃任何不在服务端候选映射里的模型返回 ID**；仅建议，绝不写入文章内容。任务去重与状态轮询按发起管理员隔离。
+
+API key 加密只在站点定义了 `AUTH_KEY` 时进行；缺失时设置页报错并保留旧 key，**绝不**用代码内固定盐加密（源码公开等于明文）。
 
 ## 代码约定
 
@@ -112,6 +116,8 @@ CI 会重跑这两个脚本并执行 `git diff --exit-code`，所以 **`.pot` / 
 3. `linkvitals/readme.txt` — `Stable tag`
 4. `linkvitals/readme.txt` — `Changelog` 顶部条目
 5. `linkvitals/readme.txt` — `Upgrade Notice` 顶部条目
+
+上架 WordPress.org 插件目录的完整流程（提交表单、审核、SVN 发布）见 [`SUBMITTING.md`](SUBMITTING.md)。
 
 ## 陷阱
 

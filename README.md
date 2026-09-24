@@ -88,6 +88,7 @@ LinkVitals/
 | Document | Audience | Covers |
 | --- | --- | --- |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | Branching, commits, PRs, and the release checklist |
+| [SUBMITTING.md](SUBMITTING.md) | Maintainers | WordPress.org plugin directory submission and SVN publishing |
 | [CLAUDE.md](CLAUDE.md) | AI coding assistants | Commands, architecture, and pitfalls in one pass |
 | [AGENTS.md](AGENTS.md) | Deep development | Full architecture, data model, settings, and design constraints |
 | [tools/README.md](tools/README.md) | Tooling | What each development script does and when to run it |
