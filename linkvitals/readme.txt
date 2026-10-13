@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 0.3.39
+Stable tag: 0.3.40
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -49,6 +49,14 @@ LinkVitals helps WordPress site owners maintain healthy links across their entir
 * Anchor (#fragment)
 * Mailto / Tel
 * Malformed / Empty
+
+**Optional third-party services:**
+
+LinkVitals sends nothing to any external service by default and adds no
+front-end tracking. Only when an administrator configures an OpenAI or
+Anthropic API key in Settings and explicitly triggers an AI suggestion
+does LinkVitals send the bounded page titles and excerpts described in
+the FAQ to that provider, for the duration of that single request.
 
 == Installation ==
 
@@ -98,6 +106,9 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.40 =
+* Adds an explicit description of the optional AI provider data flow so the disclosure appears outside the FAQ as well
 
 = 0.3.39 =
 * Fixes a fatal error on the SEO Check issue filters caused by percent signs from nested prepared fragments
@@ -386,6 +397,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.40 =
+Documentation-only release: describes the optional AI provider data flow directly in the plugin description.
 
 = 0.3.39 =
 Fixes SEO filter fatal errors, collation-sensitive internal-link queries, and scan pause/completion races found in a pre-release audit.
