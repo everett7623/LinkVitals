@@ -345,6 +345,13 @@ class LHA_Queue {
 
         $result = $wpdb->query( "TRUNCATE TABLE {$this->table}" );
 
+        // Some managed database hosts deny the DROP privilege TRUNCATE
+        // requires; fall back to a plain delete so stale rows cannot leak
+        // into the next scan's progress counts.
+        if ( false === $result ) {
+            $result = $wpdb->query( "DELETE FROM {$this->table}" );
+        }
+
         return false !== $result;
     }
 

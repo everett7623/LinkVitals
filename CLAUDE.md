@@ -72,7 +72,7 @@ python tools/dev-verify.py --require-release-zip
 |------|------|------|
 | `claim_token` | `lha_queue` 行字段 | 每批次领取令牌。完成/重试转换都带令牌校验，阻止过期 worker 覆盖已被他人重新领取的任务 |
 | `lha_scan_token` | option | 扫描代际令牌。防止旧 worker 写入新一轮扫描的完成时间和增量游标 |
-| `lha_scan_state_lock` | option | 串行化扫描初始化与完成状态转换，防止 full/incremental/recheck 并发启动互相清空队列 |
+| `lha_scan_state_lock` | option | 串行化扫描初始化与完成状态转换，防止 full/incremental/recheck 并发启动互相清空队列；pause/resume 也在此锁内做合法转换，完成提交前锁内重验队列空 + 无 pending 链接（修复刷新与升级重检会持同一把锁注入工作） |
 | `lha_upgrade_lock` | option | 带 owner token 的升级互斥，加锁后重读 `lha_version`，支持过期恢复的 CAS（CAS 直写 options 表后必须同时失效 `options` 和 `alloptions` 两处缓存，否则 autoload 的锁行会让释放方读到旧 token 而拒绝释放），只有持有者能释放 |
 
 关键不变量：只有**全新安装**在激活时提交 `lha_version`；已有安装保留旧版本标记，直到升级例程成功才提交，失败/被锁则保持不变以便下次重试。
@@ -124,6 +124,9 @@ CI 会重跑这两个脚本并执行 `git diff --exit-code`，所以 **`.pot` / 
 - **仓库根 ≠ 插件根**：编辑 `linkvitals/` 下的源码；`linkvitals.zip` 是产物（且被 `.gitignore` 忽略），只在跑打包脚本后更新，随时可能过期
 - **发布包必须叫 `linkvitals.zip`**，不能是 `linkvitals-<version>.zip`：部分主机的文件管理器会按 zip 名建目录，产生 `wp-content/plugins/linkvitals-<version>/`，破坏 WordPress 的删除与升级
 - **`language` 设置不能用 `sanitize_key()`**：会把 `zh_CN` 变成 `zh_cn`。用 `LHA_Settings` 的显式规范化，同时兼容历史小写值。默认值是 `auto`（跟随站点语言，`zh*` → 简体中文）
+- **与 `wp_posts` 的 post_type JOIN 必须两侧 BINARY**：核心表默认 `utf8mb4_unicode_520_ci`，插件表 `utf8mb4_unicode_ci`，普通字符串比较在默认安装上直接 1267 报错（内部链接统计、AI 孤儿候选、旧 occurrence 清理三处都是）
+- **时间口径**：入库时间戳一律 `current_time('mysql')`（站点本地墙钟），保留期 cutoff、报表相对时间必须换算到同一时钟，不能混用 `gmdate()`/`strtotime()` 原值
+- **SEO/报表拼接 SQL**：不要把 `$wpdb->prepare()` 的产物内插进外层 prepare 的格式串——片段里的字面 `%`（如 `'%nofollow%'`）在 PHP 8.0+ 触发 ValueError；一律占位符 + 参数数组
 - **不要同时激活 0.2.x 插件目录和 `linkvitals/`**：二者刻意共用 `LHA_*` 类与 `lha_*` 表/option/AJAX/cron 标识以保持数据兼容
 - `assets/` 下的 `.sync-conflict-*` 是 Syncthing 垃圾文件，不是源码（`dev-verify.py` 会报错）
 - `LHA_AI` 是可选的，未配置 provider key 时必须优雅降级

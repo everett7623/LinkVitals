@@ -30,6 +30,24 @@ class LHA_Cron {
         add_filter( 'cron_schedules', array( self::class, 'add_schedules' ) );
         add_action( 'lha_process_queue', array( $this, 'process_queue' ) );
         add_action( 'lha_scheduled_scan', array( $this, 'run_scheduled_scan' ) );
+
+        // Self-heal the queue worker when its event was wiped by another
+        // plugin or a database restore. The front end is skipped so public
+        // requests stay free of plugin work.
+        if ( is_admin() || wp_doing_cron() ) {
+            $this->ensure_queue_event();
+        }
+    }
+
+    /**
+     * Re-schedule the recurring queue worker if its event went missing.
+     */
+    public function ensure_queue_event(): void {
+        if ( wp_next_scheduled( 'lha_process_queue' ) ) {
+            return;
+        }
+
+        wp_schedule_event( time() + MINUTE_IN_SECONDS, 'lha_every_5_minutes', 'lha_process_queue' );
     }
 
     /**

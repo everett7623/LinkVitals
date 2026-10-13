@@ -790,6 +790,19 @@ class LHA_Scanner {
                 return false;
             }
 
+            // Re-verify the completion invariants under the lock: repair
+            // refreshes and upgrade rechecks queue shared-pipeline work while
+            // holding this same lock, so an earlier empty check outside the
+            // lock is not authoritative.
+            $counts = $this->queue->get_counts();
+            if ( ! empty( $counts['pending'] ) || ! empty( $counts['processing'] ) ) {
+                return false;
+            }
+
+            if ( ! empty( LHA_DB::get_unchecked_links( 1 ) ) ) {
+                return false;
+            }
+
             $scan_type  = get_option( 'lha_scan_type', '' );
             $started_at = get_option( 'lha_scan_started_at', '' );
 
@@ -956,34 +969,56 @@ class LHA_Scanner {
      * Pause scanning.
      *
      * Sets a running scan to paused, preventing further batch processing (Req 8.8).
+     * The transition is fenced by the scan state lock so a worker completing the
+     * last batch cannot be overwritten to paused after it already finished.
      *
      * @return string The resulting scan status.
      */
     public function pause(): string {
-        $status = (string) get_option( 'lha_scan_status', 'idle' );
-        if ( 'running' === $status ) {
-            update_option( 'lha_scan_status', 'paused' );
-            $status = (string) get_option( 'lha_scan_status', 'idle' );
+        $lock_token = self::acquire_scan_state_lock();
+        if ( false === $lock_token ) {
+            return (string) get_option( 'lha_scan_status', 'idle' );
         }
 
-        return $status;
+        try {
+            $status = (string) get_option( 'lha_scan_status', 'idle' );
+            if ( 'running' === $status ) {
+                update_option( 'lha_scan_status', 'paused' );
+                $status = (string) get_option( 'lha_scan_status', 'idle' );
+            }
+
+            return $status;
+        } finally {
+            self::release_scan_state_lock( $lock_token );
+        }
     }
 
     /**
      * Resume scanning.
      *
      * Resumes a paused scan by setting status back to running (Req 8.9).
+     * The transition is fenced by the scan state lock for the same reason
+     * as pause().
      *
      * @return string The resulting scan status.
      */
     public function resume(): string {
-        $status = (string) get_option( 'lha_scan_status', 'idle' );
-        if ( 'paused' === $status ) {
-            update_option( 'lha_scan_status', 'running' );
-            $status = (string) get_option( 'lha_scan_status', 'idle' );
+        $lock_token = self::acquire_scan_state_lock();
+        if ( false === $lock_token ) {
+            return (string) get_option( 'lha_scan_status', 'idle' );
         }
 
-        return $status;
+        try {
+            $status = (string) get_option( 'lha_scan_status', 'idle' );
+            if ( 'paused' === $status ) {
+                update_option( 'lha_scan_status', 'running' );
+                $status = (string) get_option( 'lha_scan_status', 'idle' );
+            }
+
+            return $status;
+        } finally {
+            self::release_scan_state_lock( $lock_token );
+        }
     }
 
     /**

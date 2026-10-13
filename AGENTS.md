@@ -136,16 +136,23 @@ Scanning and queue:
   so clearing a post's content also clears its old link records.
 - Occurrence replacement is delayed until extraction succeeds; a transient
   parser failure must preserve the last known-good result and retry.
-- Stale post-occurrence cleanup compares post types as binary strings, because
-  WordPress core tables and plugin tables may use different utf8mb4 collations.
+- Every join between plugin occurrence object types and `wp_posts` post types
+  compares as binary strings (`BINARY p.post_type = BINARY o.object_type`),
+  because WordPress core tables and plugin tables may use different utf8mb4
+  collations and a plain string comparison fails with "Illegal mix of
+  collations" on default installations.
 - Full scans use bounded 100-row queue inserts; incremental and repair writes
   stay on the duplicate-aware path.
 - Public taxonomy descriptions are paged by stable term ID in 100-term windows
   so initialization never loads an entire large taxonomy at once.
 - Runtime batch sizes are clamped before queue and pending-link processing even
   when the stored option is corrupted.
-- Pause and resume are restricted to valid running/paused transitions, and AJAX
-  batch controls must report and honor the authoritative scan state.
+- Pause and resume are restricted to valid running/paused transitions and are
+  fenced by the scan state lock, so a worker completing the last batch cannot
+  be overwritten to paused; AJAX batch controls must report and honor the
+  authoritative scan state. Scan completion re-verifies the empty-queue and
+  no-pending-links invariants inside the lock, because repair refreshes and
+  upgrade rechecks inject shared-pipeline work while holding that same lock.
 - Link rows with no remaining occurrences are removed at scan start and again
   after queue and pending-link work fully drain.
 
@@ -153,6 +160,11 @@ Activation and cron:
 
 - The custom queue recurrence must be registered explicitly during activation,
   or the first `lha_process_queue` event is rejected as an unknown schedule.
+  Admin and cron requests additionally re-create the event when it went
+  missing; front-end requests never touch cron state.
+- Retention cutoffs and relative-time displays compare against timestamps
+  written with `current_time( 'mysql' )` (site-local wall clock); computing
+  cutoffs with `gmdate()` shifts retention by the site's UTC offset.
 - AI cron cleanup must remove every argument variant, not just empty-argument
   events.
 - Scan-completion notifications share one baseline and a short-lived option

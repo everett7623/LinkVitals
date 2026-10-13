@@ -162,7 +162,7 @@ class LHA_Internal_Analyzer {
                 "SELECT o.object_id, COUNT(DISTINCT l.id) as outbound_count
                  FROM {$table_occurrences} o
                  INNER JOIN {$table_links} l ON o.link_id = l.id
-                 INNER JOIN {$table_posts} p ON p.ID = o.object_id AND p.post_type = o.object_type
+                 INNER JOIN {$table_posts} p ON p.ID = o.object_id AND BINARY p.post_type = BINARY o.object_type
                  WHERE l.link_type = %s AND p.post_status = %s
                  GROUP BY o.object_id",
                 'internal',
@@ -215,7 +215,7 @@ class LHA_Internal_Analyzer {
                 "SELECT l.id, l.url, o.object_id as source_post_id
                  FROM {$table_links} l
                  INNER JOIN {$table_occurrences} o ON l.id = o.link_id
-                 INNER JOIN {$table_posts} p ON p.ID = o.object_id AND p.post_type = o.object_type
+                 INNER JOIN {$table_posts} p ON p.ID = o.object_id AND BINARY p.post_type = BINARY o.object_type
                  WHERE l.link_type = %s AND p.post_status = %s",
                 'internal',
                 'publish'

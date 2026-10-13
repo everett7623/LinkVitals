@@ -185,30 +185,28 @@ class LHA_SEO_Checker {
         $table_links       = LHA_DB::table( 'links' );
         $table_occurrences = LHA_DB::table( 'occurrences' );
 
-        // Build WHERE clause based on issue filter.
+        // Build WHERE clause based on issue filter. Filter values stay as
+        // bound arguments because prepared fragments contain literal percent
+        // signs that would corrupt an outer prepare's format string.
         $where_extra = '';
+        $base_values = array( 'external', 'a' );
+
         switch ( $issue_filter ) {
             case 'missing_nofollow':
-                $where_extra = $wpdb->prepare(
-                    ' AND o.raw_html NOT LIKE %s',
-                    '%nofollow%'
-                );
+                $where_extra  = ' AND o.raw_html NOT LIKE %s';
+                $base_values[] = '%nofollow%';
                 break;
 
             case 'missing_noopener_noreferrer':
-                $where_extra = $wpdb->prepare(
-                    ' AND o.raw_html LIKE %s AND ( o.raw_html NOT LIKE %s OR o.raw_html NOT LIKE %s )',
-                    '%target="_blank"%',
-                    '%noopener%',
-                    '%noreferrer%'
-                );
+                $where_extra  = ' AND o.raw_html LIKE %s AND ( o.raw_html NOT LIKE %s OR o.raw_html NOT LIKE %s )';
+                $base_values[] = '%target="_blank"%';
+                $base_values[] = '%noopener%';
+                $base_values[] = '%noreferrer%';
                 break;
 
             case 'http_not_https':
-                $where_extra = $wpdb->prepare(
-                    ' AND l.url LIKE %s',
-                    'http://%'
-                );
+                $where_extra  = ' AND l.url LIKE %s';
+                $base_values[] = 'http://%';
                 break;
         }
 
@@ -220,12 +218,15 @@ class LHA_SEO_Checker {
                  FROM {$table_occurrences} o
                  INNER JOIN {$table_links} l ON o.link_id = l.id
                  WHERE l.link_type = %s AND o.html_tag = %s AND l.is_ignored = 0{$where_extra}",
-                'external',
-                'a'
+                ...$base_values
             )
         );
 
         // Get paginated results.
+        $results_values   = $base_values;
+        $results_values[] = $per_page;
+        $results_values[] = $offset;
+
         // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
         $results = $wpdb->get_results(
             $wpdb->prepare(
@@ -236,10 +237,7 @@ class LHA_SEO_Checker {
                  WHERE l.link_type = %s AND o.html_tag = %s AND l.is_ignored = 0{$where_extra}
                  ORDER BY o.created_at DESC
                  LIMIT %d OFFSET %d",
-                'external',
-                'a',
-                $per_page,
-                $offset
+                ...$results_values
             ),
             ARRAY_A
         );

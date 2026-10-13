@@ -420,7 +420,9 @@ class LHA_List_Table extends WP_List_Table {
         if ( '' === $last_checked || '0000-00-00 00:00:00' === $last_checked ) {
             return esc_html__( 'Never', 'linkvitals' );
         }
-        return esc_html( human_time_diff( strtotime( $last_checked ) ) . ' ' . __( 'ago', 'linkvitals' ) );
+        // last_checked is stored with current_time('mysql') (site-local wall
+        // clock); convert to GMT before diffing against the real epoch.
+        return esc_html( human_time_diff( strtotime( get_gmt_from_date( $last_checked ) ) ) . ' ' . __( 'ago', 'linkvitals' ) );
     }
 
     /**

@@ -326,7 +326,21 @@ class LHA_DB {
             )
         );
 
-        return $result ? (int) $wpdb->insert_id : false;
+        if ( ! $result ) {
+            // A concurrent worker may have inserted the same normalized URL
+            // between the SELECT above and this INSERT. Reuse its row instead
+            // of dropping this occurrence.
+            $raced_id = $wpdb->get_var(
+                $wpdb->prepare(
+                    "SELECT id FROM {$table} WHERE url_hash = %s",
+                    $url_hash
+                )
+            );
+
+            return $raced_id ? (int) $raced_id : false;
+        }
+
+        return (int) $wpdb->insert_id;
     }
 
     /**
@@ -411,7 +425,7 @@ class LHA_DB {
             )
         );
 
-        return true;
+        return false !== $result;
     }
 
     /**
@@ -1166,7 +1180,10 @@ class LHA_DB {
         }
 
         $table  = self::table( 'repairs' );
-        $cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $days * DAY_IN_SECONDS ) );
+        // Timestamps are stored via current_time('mysql') (site-local wall
+        // clock), so the cutoff must be computed on the same clock instead
+        // of gmdate() or retention shifts by the site's UTC offset.
+        $cutoff = gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) ) - ( $days * DAY_IN_SECONDS ) );
 
         $result = $wpdb->query(
             $wpdb->prepare(

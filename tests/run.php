@@ -1026,7 +1026,7 @@ lha_test(
     static function(): void {
         $analyzer = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-internal-analyzer.php' );
         $ai       = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-internal.php' );
-        $post_join = 'p.ID = o.object_id AND p.post_type = o.object_type';
+        $post_join = 'p.ID = o.object_id AND BINARY p.post_type = BINARY o.object_type';
 
         lha_assert_same( 2, substr_count( is_string( $analyzer ) ? $analyzer : '', $post_join ) );
         lha_assert_same( 1, substr_count( is_string( $ai ) ? $ai : '', $post_join ) );

@@ -41,6 +41,13 @@ class LHA_Settings {
     private string $nonce_action = 'lha_settings_nonce';
 
     /**
+     * Whether an API key submission failed to persist during the current save.
+     *
+     * @var bool
+     */
+    private bool $api_key_save_failed = false;
+
+    /**
      * Normalize stored or submitted language codes without lowercasing locale.
      */
     private function normalize_language( mixed $language ): string {
@@ -97,6 +104,7 @@ class LHA_Settings {
             ? wp_unslash( $_POST['lha_settings'] )
             : array();
 
+        $this->api_key_save_failed = false;
         $sanitized = $this->validate_and_sanitize( $input, $old_settings );
 
         update_option( $this->option_name, $sanitized );
@@ -112,13 +120,16 @@ class LHA_Settings {
             $cron->schedule_events( $sanitized );
         }
 
-        // Add success notice.
-        add_settings_error(
-            'lha_settings',
-            'lha_settings_saved',
-            __( 'Settings saved.', 'linkvitals' ),
-            'success'
-        );
+        // Only claim success when every submitted API key actually persisted;
+        // key save failures already registered their own error notices.
+        if ( ! $this->api_key_save_failed ) {
+            add_settings_error(
+                'lha_settings',
+                'lha_settings_saved',
+                __( 'Settings saved.', 'linkvitals' ),
+                'success'
+            );
+        }
 
         return true;
     }
@@ -195,6 +206,7 @@ class LHA_Settings {
             $stored_key  = (string) ( $old_settings[ $field ] ?? '' );
             $encrypted   = '' !== $submitted ? LHA_AI::encrypt( $submitted ) : '';
             if ( '' !== $submitted && '' === $encrypted ) {
+                $this->api_key_save_failed = true;
                 add_settings_error(
                     'lha_settings',
                     'lha_ai_key_' . $provider . '_not_saved',

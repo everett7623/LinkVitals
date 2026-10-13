@@ -64,7 +64,8 @@ class LHA_Exporter {
         // UTF-8 BOM for Excel compatibility.
         fwrite( $output, "\xEF\xBB\xBF" );
 
-        // Header row matching requirement 18.2.
+        // Header row matching requirement 18.2. The explicit escape parameter
+        // suppresses a PHP 8.3+ deprecation that could corrupt the stream.
         fputcsv( $output, array(
             'status',
             'url',
@@ -77,7 +78,7 @@ class LHA_Exporter {
             'error_type',
             'final_url',
             'last_checked',
-        ) );
+        ), ',', '"', '\\' );
 
         // Export in bounded batches so reports larger than one query window
         // are streamed completely instead of being silently truncated.
@@ -117,7 +118,7 @@ class LHA_Exporter {
                     self::guard_cell( $link['error_type'] ?? '' ),
                     self::guard_cell( $link['final_url'] ?? '' ),
                     self::guard_cell( $link['last_checked'] ?? '' ),
-                ) );
+                ), ',', '"', '\\' );
             }
 
             $offset += $batch_size;

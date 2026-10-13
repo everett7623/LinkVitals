@@ -122,7 +122,7 @@ class LHA_Logger {
         global $wpdb;
 
         $table  = LHA_DB::table( 'logs' );
-        $cutoff = gmdate( 'Y-m-d H:i:s', time() - ( $days * DAY_IN_SECONDS ) );
+        $cutoff = gmdate( 'Y-m-d H:i:s', strtotime( current_time( 'mysql' ) ) - ( $days * DAY_IN_SECONDS ) );
 
         $result = $wpdb->query(
             $wpdb->prepare(

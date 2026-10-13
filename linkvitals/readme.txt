@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 0.3.38
+Stable tag: 0.3.39
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -98,6 +98,13 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.39 =
+* Fixes a fatal error on the SEO Check issue filters caused by percent signs from nested prepared fragments
+* Uses binary-safe post-type joins in internal-link counts and AI orphan candidates so differing table collations cannot break the queries
+* Fences pause and resume with the scan state lock and re-verifies queue and pending-link work inside the completion lock
+* Aligns log and repair-history retention cutoffs and the report's last-checked display with the site-local clock
+* Recreates the queue cron event automatically when it is missing, falls back to DELETE when TRUNCATE is denied, reuses links inserted concurrently, reports link-update database failures, and passes explicit CSV escape parameters
 
 = 0.3.38 =
 * Exports complete CSV reports in bounded batches so sites with more than 10,000 matching links are no longer silently truncated
@@ -379,6 +386,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.39 =
+Fixes SEO filter fatal errors, collation-sensitive internal-link queries, and scan pause/completion races found in a pre-release audit.
 
 = 0.3.38 =
 Completes CSV exports on large sites, hardens AI key storage, and marks the plugin tested with WordPress 7.1.
