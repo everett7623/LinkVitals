@@ -13,8 +13,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class LHA_Admin {
 
+    private string $page_hook = '';
+    private ?LHA_List_Table $report_list_table = null;
+
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'add_menu' ) );
+        add_action( 'admin_init', array( $this, 'redirect_legacy_page' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
         add_action( 'admin_notices', array( $this, 'maybe_show_notice' ) );
         add_action( 'wp_ajax_lha_start_scan', array( $this, 'ajax_start_scan' ) );
@@ -65,7 +69,7 @@ class LHA_Admin {
         $broken_total = LHA_DB::get_issue_total_from_stats( $stats );
 
         if ( $broken_total > 0 ) {
-            $url = admin_url( 'tools.php?page=lha-dashboard&tab=report&link_status=issues' );
+            $url = admin_url( 'admin.php?page=lha-dashboard&tab=report&link_status=issues' );
             printf(
                 '<div class="notice notice-warning is-dismissible"><p>%s <a href="%s">%s</a></p></div>',
                 sprintf(
@@ -83,19 +87,52 @@ class LHA_Admin {
     }
 
     /**
-     * Register admin menu under Tools
-     *
-     * Creates one top-level entry "LinkVitals" under Tools,
-     * with sub-pages rendered as tabs within the plugin interface.
+     * 注册一级菜单，现有功能继续通过页内标签切换。
      */
     public function add_menu(): void {
-        add_management_page(
+        $this->page_hook = add_menu_page(
             __( 'LinkVitals', 'linkvitals' ),
             __( 'LinkVitals', 'linkvitals' ),
             'manage_options',
             'lha-dashboard',
-            array( $this, 'render_page' )
+            array( $this, 'render_page' ),
+            'dashicons-admin-links',
+            76
         );
+
+        add_action( 'load-' . $this->page_hook, array( $this, 'load_page' ) );
+    }
+
+    /**
+     * 将旧书签和邮件链接转到一级菜单入口，并保留旧表单的 POST 请求体。
+     */
+    public function redirect_legacy_page(): void {
+        global $pagenow;
+
+        if ( 'tools.php' !== $pagenow || 'lha-dashboard' !== ( $_GET['page'] ?? '' ) || ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+
+        // 完整编码查询参数，避免搜索词中的 &、# 等字符改变参数含义。
+        $query = http_build_query( wp_unslash( $_GET ), '', '&', PHP_QUERY_RFC3986 );
+        $status = 'POST' === ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ? 307 : 302;
+        wp_safe_redirect( admin_url( 'admin.php' ) . '?' . $query, $status );
+        exit;
+    }
+
+    /**
+     * 在 WordPress 输出后台页头前处理批量动作，保证确认页跳转可以发送响应头。
+     */
+    public function load_page(): void {
+        if ( ! current_user_can( 'manage_options' ) ) {
+            wp_die( esc_html__( 'Permission denied.', 'linkvitals' ) );
+        }
+
+        $tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'dashboard';
+        if ( 'report' === $tab && ! isset( $_GET['lha_bulk_action'] ) ) {
+            $this->report_list_table = new LHA_List_Table();
+            $this->report_list_table->process_bulk_action();
+        }
     }
 
     /**
@@ -103,7 +140,7 @@ class LHA_Admin {
      */
     public function enqueue_assets( string $hook ): void {
         // Only load on our page
-        if ( $hook !== 'tools_page_lha-dashboard' ) {
+        if ( '' === $this->page_hook || $hook !== $this->page_hook ) {
             return;
         }
 
@@ -215,19 +252,13 @@ class LHA_Admin {
             'logs'      => __( 'Logs', 'linkvitals' ),
         );
 
-        $report_list_table = null;
-        if ( 'report' === $tab ) {
-            $report_list_table = new LHA_List_Table();
-            $report_list_table->process_bulk_action();
-        }
-
         ?>
         <div class="wrap">
             <h1><?php esc_html_e( 'LinkVitals', 'linkvitals' ); ?></h1>
 
             <nav class="nav-tab-wrapper">
                 <?php foreach ( $tabs as $tab_key => $tab_label ) : ?>
-                    <a href="<?php echo esc_url( admin_url( 'tools.php?page=lha-dashboard&tab=' . $tab_key ) ); ?>"
+                    <a href="<?php echo esc_url( admin_url( 'admin.php?page=lha-dashboard&tab=' . $tab_key ) ); ?>"
                        class="nav-tab <?php echo $tab === $tab_key ? 'nav-tab-active' : ''; ?>">
                         <?php echo esc_html( $tab_label ); ?>
                     </a>
@@ -238,7 +269,7 @@ class LHA_Admin {
                 <?php
                 switch ( $tab ) {
                     case 'report':
-                        $this->render_report( $report_list_table );
+                        $this->render_report( $this->report_list_table );
                         break;
                     case 'internal':
                         $this->render_internal();
@@ -307,7 +338,7 @@ class LHA_Admin {
                         if ( '' !== $report_filter ) {
                             $report_args['link_status'] = $report_filter;
                         }
-                        $report_url = add_query_arg( $report_args, admin_url( 'tools.php' ) );
+                        $report_url = add_query_arg( $report_args, admin_url( 'admin.php' ) );
                         ?>
                         <a class="lha-stat-card lha-stat-card-link <?php echo esc_attr( $card['class'] ); ?>" href="<?php echo esc_url( $report_url ); ?>">
                             <span class="lha-stat-number"><?php echo esc_html( number_format_i18n( $stats[ $card['stat'] ] ?? 0 ) ); ?></span>
@@ -430,7 +461,7 @@ class LHA_Admin {
                 foreach ( $filters as $key => $label ) {
                     $i++;
                     $class = ( $key === $current_filter ) ? 'current' : '';
-                    $url = add_query_arg( array( 'page' => 'lha-dashboard', 'tab' => 'report', 'link_status' => $key ), admin_url( 'tools.php' ) );
+                    $url = add_query_arg( array( 'page' => 'lha-dashboard', 'tab' => 'report', 'link_status' => $key ), admin_url( 'admin.php' ) );
                     printf(
                         '<li><a href="%s" class="%s">%s</a>%s</li>',
                         esc_url( $url ),
@@ -508,7 +539,7 @@ class LHA_Admin {
                     );
                     printf(
                         '<p><a href="%s" class="button">%s</a></p>',
-                        esc_url( admin_url( 'tools.php?page=lha-dashboard&tab=report' ) ),
+                        esc_url( admin_url( 'admin.php?page=lha-dashboard&tab=report' ) ),
                         esc_html__( 'Back to Report', 'linkvitals' )
                     );
                     return;
@@ -530,7 +561,7 @@ class LHA_Admin {
                 );
                 printf(
                     '<p><a href="%s" class="button">%s</a></p>',
-                    esc_url( admin_url( 'tools.php?page=lha-dashboard&tab=report' ) ),
+                    esc_url( admin_url( 'admin.php?page=lha-dashboard&tab=report' ) ),
                         esc_html__( 'Back to Report', 'linkvitals' )
                 );
                 return;
@@ -624,13 +655,13 @@ class LHA_Admin {
                     </table>
                     <p class="submit">
                         <input type="submit" name="lha_bulk_confirm_submit" class="button button-primary" value="<?php esc_attr_e( 'Confirm Replace', 'linkvitals' ); ?>" />
-                        <a href="<?php echo esc_url( admin_url( 'tools.php?page=lha-dashboard&tab=report' ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'linkvitals' ); ?></a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=lha-dashboard&tab=report' ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'linkvitals' ); ?></a>
                     </p>
                 <?php else : ?>
                     <p class="description"><?php esc_html_e( 'This will remove the link tags from content but keep the anchor text. This action cannot be undone.', 'linkvitals' ); ?></p>
                     <p class="submit">
                         <input type="submit" name="lha_bulk_confirm_submit" class="button button-primary" value="<?php esc_attr_e( 'Confirm Unlink', 'linkvitals' ); ?>" />
-                        <a href="<?php echo esc_url( admin_url( 'tools.php?page=lha-dashboard&tab=report' ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'linkvitals' ); ?></a>
+                        <a href="<?php echo esc_url( admin_url( 'admin.php?page=lha-dashboard&tab=report' ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'linkvitals' ); ?></a>
                     </p>
                 <?php endif; ?>
             </form>
@@ -653,7 +684,7 @@ class LHA_Admin {
             'filter'   => $filter,
         ) );
 
-        $base_url     = admin_url( 'tools.php?page=lha-dashboard&tab=internal' );
+        $base_url     = admin_url( 'admin.php?page=lha-dashboard&tab=internal' );
         $orphan_ids   = array_map(
             'absint',
             array_column(
@@ -666,7 +697,7 @@ class LHA_Admin {
         );
         $indexed_jobs = LHA_AI_Jobs::get_indexed_jobs( $orphan_ids, get_current_user_id() );
         $ai_available = LHA_AI::is_available();
-        $settings_url = admin_url( 'tools.php?page=lha-dashboard&tab=settings' );
+        $settings_url = admin_url( 'admin.php?page=lha-dashboard&tab=settings' );
 
         ?>
         <div id="lha-internal">
@@ -937,7 +968,7 @@ class LHA_Admin {
         $counts = $seo_checker->get_issue_counts();
         $report = $seo_checker->get_report( $per_page, ( $page - 1 ) * $per_page, $issue_filter );
 
-        $base_url = admin_url( 'tools.php?page=lha-dashboard&tab=seo' );
+        $base_url = admin_url( 'admin.php?page=lha-dashboard&tab=seo' );
         ?>
         <div id="lha-seo">
             <!-- SEO Issue Summary -->

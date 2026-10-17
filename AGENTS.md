@@ -6,33 +6,39 @@ This file is the comprehensive reference for AI coding assistants (Claude Code, 
 
 ## Repository Layout
 
-The actual WordPress plugin lives in `linkvitals/`. The repository
-root is a development and packaging workspace.
+The WordPress plugin source lives in `src/`. The repository root is a
+development and packaging workspace; release packaging maps `src/` to the
+required `linkvitals/` directory inside `linkvitals.zip`.
 
-- `linkvitals/linkvitals.php` - main plugin bootstrap,
+- `src/linkvitals.php` - main plugin bootstrap,
   version constants, singleton entry point, and manual `require_once` list.
-- `linkvitals/includes/` - all `LHA_*` classes, one class per
+- `src/includes/` - all `LHA_*` classes, one class per
   `class-lha-*.php` file.
-- `linkvitals/assets/css/admin.css` - admin-only stylesheet.
-- `linkvitals/assets/js/admin.js` - admin-only JavaScript.
-- `linkvitals/assets/js/image-repair.js` - bounded row and bulk interactions
+- `src/assets/css/admin.css` - admin-only stylesheet.
+- `src/assets/js/admin.js` - admin-only JavaScript.
+- `src/assets/js/image-repair.js` - bounded row and bulk interactions
   for missing WordPress image-size repairs.
-- `linkvitals/assets/js/ai-admin.js` - AI connection tests and recursive
+- `src/assets/js/ai-admin.js` - AI connection tests and recursive
   polling/rendering for background orphan-page suggestions.
-- `linkvitals/languages/` - translation template and Chinese
+- `src/languages/` - translation template and Chinese
   translation files.
 - `tests/run.php` - dependency-free PHP contract tests for core static behavior.
+- `tests/admin-navigation.php` - dependency-free PHP behavior tests for menu
+  registration, legacy redirects, and pre-header bulk actions using WordPress stubs.
+- `tests/admin-scan.test.js` - Node.js behavior tests for scan continuation and
+  request concurrency, running the actual admin script with browser stubs.
 - `tests/integration/` - WP-CLI smoke tests that run against a real temporary
   WordPress database in GitHub Actions.
 - `.github/workflows/ci.yml` - PHP compatibility, contract, translation, and
   release-package validation for pushes and pull requests.
-- `generate-mo.php` and `generate-mo.py` - compile `.po` translations to `.mo`.
+- `tools/generate-mo.php` and `tools/generate-mo.py` - compile `.po`
+  translations to `.mo`.
 - `linkvitals.zip` - WordPress-uploadable release artifact.
-- `SUBMITTING.md` - maintainer runbook for the WordPress.org plugin
+- `docs/SUBMITTING.md` - maintainer runbook for the WordPress.org plugin
   directory submission, review, and SVN publishing workflow.
 
-Do not edit files inside release zips. Edit plugin source under
-`linkvitals/`, then rebuild release artifacts only when packaging.
+Do not edit files inside release zips. Edit plugin source under `src/`, then
+rebuild release artifacts only when packaging.
 
 ## Commands
 
@@ -41,19 +47,21 @@ below. GitHub Actions also installs temporary WordPress sites backed by MySQL
 for lifecycle and database integration checks.
 
 - Lint a PHP file when PHP is available:
-  `php -l "linkvitals/includes/class-lha-<name>.php"`
+  `php -l "src/includes/class-lha-<name>.php"`
 - Run lightweight repository checks:
   `python tools/dev-verify.py`
 - Run the dependency-free PHP contract tests directly:
   `php tests/run.php`
+- Run the admin behavior regressions directly:
+  `php tests/admin-navigation.php` and `node --test tests/admin-scan.test.js`
 - Synchronize source translation strings into the manual catalogs:
   `python tools/i18n-sync.py`
 - Rebuild Chinese translations after changing translatable strings:
-  `python generate-mo.py`
+  `python tools/generate-mo.py`
 - Build the WordPress-installable release zip:
   `python tools/package-release.py`
 - The PHP translation compiler is also available:
-  `php generate-mo.php`
+  `php tools/generate-mo.php`
 - GitHub Actions runs PHP lint and `tests/run.php` on PHP 8.0 and PHP 8.3,
   checks translation synchronization and a freshly built release zip, and runs
   WP-CLI integration smoke tests against WordPress 6.4/PHP 8.0 and latest
@@ -61,16 +69,18 @@ for lifecycle and database integration checks.
 
 If `php` is not on PATH, say so in the final response and use available checks
 such as targeted source review and translation compilation with Python.
+The lightweight verifier runs both admin behavior suites when PHP and Node.js
+are available; CI requires them.
 
 Every accepted source, documentation, packaging, or release-workflow change must
 bump the plugin version before packaging. Version bumps must update all of these
 places:
 
-- `Version:` header in `linkvitals/linkvitals.php`
-- `LHA_VERSION` constant in `linkvitals/linkvitals.php`
-- `Stable tag` in `linkvitals/readme.txt`
-- top `Changelog` entry in `linkvitals/readme.txt`
-- top `Upgrade Notice` entry in `linkvitals/readme.txt`
+- `Version:` header in `src/linkvitals.php`
+- `LHA_VERSION` constant in `src/linkvitals.php`
+- `Stable tag` in `src/readme.txt`
+- top `Changelog` entry in `src/readme.txt`
+- top `Upgrade Notice` entry in `src/readme.txt`
 
 ## Product Summary
 
@@ -94,7 +104,7 @@ The MVP and phase-two feature set is implemented in source:
 - DOM-based link extraction and URL classification
 - HTTP checking with HEAD, GET fallback, redirects, ignore lists, and rate limit
 - WP-Cron queue processing and optional scheduled scans
-- Tools admin page with tabs for Dashboard, Links Report, Internal Links,
+- Top-level LinkVitals admin page with tabs for Dashboard, Links Report, Internal Links,
   SEO Check, Settings, and Logs
 - AJAX scan controls and per-link actions
 - WP_List_Table report with filters, search, sorting, pagination, and bulk
@@ -123,8 +133,9 @@ Reporting and statistics:
   spreadsheet formula injection by `LHA_Exporter::guard_cell()`, and
   `LHA_DB::get_links()` orders with an `l.id` tiebreaker so batched windows
   stay stable.
-- Report bulk actions must be handled before page output so confirmation
-  redirects and immediate list refreshes work.
+- Report bulk actions must be handled in the menu's `load-$hook` callback,
+  before WordPress outputs the admin header. Rendering reuses that list-table
+  instance and never processes bulk actions inside `prepare_items()`.
 - Internal-link source counts must be restricted to matching published post
   occurrences; taxonomy and menu object IDs can otherwise collide with post IDs.
 - SEO issue badges are translated through an explicit whitelist so internal
@@ -372,8 +383,11 @@ pipeline ownership.
 
 ## Admin And AJAX
 
-The admin page is under Tools:
-`tools.php?page=lha-dashboard`.
+The admin page has its own top-level LinkVitals menu:
+`admin.php?page=lha-dashboard`. All generated plugin links use this entry point.
+Legacy `tools.php?page=lha-dashboard` links redirect during `admin_init`, with
+query parameters preserved and a 307 redirect for POST requests to retain form
+bodies. Assets and pre-render bulk actions use the hook returned by `add_menu_page()`.
 
 Tabs:
 
@@ -415,7 +429,7 @@ Settings saves use `check_admin_referer( 'lha_settings_nonce' )`.
 ## Coding Conventions
 
 - Prefix every class with `LHA_`.
-- Put each class in `linkvitals/includes/class-lha-<name>.php`.
+- Put each class in `src/includes/class-lha-<name>.php`.
 - Add every new class file to the manual `require_once` list in
   `linkvitals.php`; there is no autoloader.
 - Every PHP file starts with:
@@ -430,13 +444,13 @@ Settings saves use `check_admin_referer( 'lha_settings_nonce' )`.
 
 ## Internationalization
 
-Translation files are in `linkvitals/languages/`.
+Translation files are in `src/languages/`.
 
 When adding or changing user-facing strings:
 
 1. Wrap strings with WordPress translation functions.
 2. Update `linkvitals.pot` and `linkvitals-zh_CN.po`.
-3. Run `python generate-mo.py` from the repo root.
+3. Run `python tools/generate-mo.py` from the repo root.
 
 The current translation setup is manual, not generated by WP-CLI.
 

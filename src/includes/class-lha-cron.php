@@ -237,7 +237,7 @@ class LHA_Cron {
                 $site_name
             );
 
-            $report_url = admin_url( 'tools.php?page=lha-dashboard&tab=report&link_status=issues' );
+            $report_url = admin_url( 'admin.php?page=lha-dashboard&tab=report&link_status=issues' );
 
             $body = sprintf(
                 /* translators: 1: site name, 2: scan time, 3: broken count, 4: 404 count, 5: 5xx count, 6: server error count, 7: timeout count, 8: SSL error count, 9: DNS error count, 10: forbidden count, 11: report URL */

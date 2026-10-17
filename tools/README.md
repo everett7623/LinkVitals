@@ -143,7 +143,7 @@ python tools/package-release.py --output /path/to/linkvitals-1.2.3.zip --allow-v
 
 **功能:**
 - 验证版本号一致性
-- 打包 `linkvitals/` 目录
+- 将 `src/` 打包为归档内的 `linkvitals/` 目录
 - 排除开发文件
 - 验证包结构
 
@@ -164,8 +164,8 @@ python tools/dev-check.py
 ### 3. 修改翻译（如需要）
 ```bash
 python tools/i18n-sync.py
-# 编辑 linkvitals/languages/linkvitals-zh_CN.po
-python generate-mo.py
+# 编辑 src/languages/linkvitals-zh_CN.po
+python tools/generate-mo.py
 ```
 
 ### 4. 提交前验证

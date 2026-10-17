@@ -37,7 +37,7 @@ git checkout -b feature/your-feature-name
 
 ### 2. 进行更改
 
-编辑 `linkvitals/` 目录下的插件源码。
+编辑 `src/` 目录下的插件源码。
 
 **重要约定**：
 - 所有类前缀 `LHA_`
@@ -51,10 +51,10 @@ git checkout -b feature/your-feature-name
 # 同步翻译字符串
 python tools/i18n-sync.py
 
-# 编辑 linkvitals/languages/linkvitals-zh_CN.po 中的 msgstr
+# 编辑 src/languages/linkvitals-zh_CN.po 中的 msgstr
 
 # 编译翻译
-python generate-mo.py
+python tools/generate-mo.py
 ```
 
 ### 4. 运行测试
@@ -119,11 +119,11 @@ git push origin feature/your-feature-name
 
 ### 1. 更新版本号（5 处）
 
-1. `linkvitals/linkvitals.php` - `Version:` 头部
-2. `linkvitals/linkvitals.php` - `LHA_VERSION` 常量
-3. `linkvitals/readme.txt` - `Stable tag`
-4. `linkvitals/readme.txt` - `Changelog` 顶部
-5. `linkvitals/readme.txt` - `Upgrade Notice` 顶部
+1. `src/linkvitals.php` - `Version:` 头部
+2. `src/linkvitals.php` - `LHA_VERSION` 常量
+3. `src/readme.txt` - `Stable tag`
+4. `src/readme.txt` - `Changelog` 顶部
+5. `src/readme.txt` - `Upgrade Notice` 顶部
 
 ### 2. 构建发布包
 
@@ -146,7 +146,7 @@ git push origin v0.x.x
 
 ### 5. 在 GitHub 上创建 Release
 
-上传生成的 `linkvitals.zip` 文件。
+上传生成的仓库根目录 `linkvitals.zip` 文件。
 
 ## 测试
 
@@ -201,8 +201,8 @@ php tests/run.php
 
 ## 获取帮助
 
-- 查看 [AGENTS.md](AGENTS.md) 获取完整开发指南
-- 查看 [CLAUDE.md](CLAUDE.md) 获取快速参考
+- 查看 [AGENTS.md](../AGENTS.md) 获取完整开发指南
+- 查看 [CLAUDE.md](../CLAUDE.md) 获取快速参考
 - 在 GitHub issues 中提问
 
 感谢你的贡献！

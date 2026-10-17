@@ -86,13 +86,13 @@ def main() -> int:
     print("-" * 60)
 
     required_paths = [
-        (ROOT / "linkvitals" / "linkvitals.php", "插件主文件"),
-        (ROOT / "linkvitals" / "includes", "类文件目录"),
+        (ROOT / "src" / "linkvitals.php", "插件主文件"),
+        (ROOT / "src" / "includes", "类文件目录"),
         (ROOT / "tools" / "dev-verify.py", "验证脚本"),
         (ROOT / "tests" / "run.php", "测试套件"),
         (ROOT / ".github" / "workflows" / "ci.yml", "CI 配置"),
         (ROOT / "AGENTS.md", "开发指南"),
-        (ROOT / "CONTRIBUTING.md", "贡献指南"),
+        (ROOT / "docs" / "CONTRIBUTING.md", "贡献指南"),
     ]
 
     for path, description in required_paths:
@@ -159,7 +159,7 @@ def main() -> int:
         print("✗ 开发环境检查发现问题")
         print()
         print("请安装缺失的工具或修复文件结构问题。")
-        print("参考 CONTRIBUTING.md 了解详细的环境设置说明。")
+        print("参考 docs/CONTRIBUTING.md 了解详细的环境设置说明。")
 
     print("=" * 60)
 

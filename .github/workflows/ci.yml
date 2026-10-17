@@ -42,6 +42,9 @@ jobs:
       - name: Run dependency-free contract tests
         run: php tests/run.php
 
+      - name: Run admin navigation behavior tests
+        run: php tests/admin-navigation.php
+
   wordpress-integration:
     name: WordPress ${{ matrix.wordpress }} / PHP ${{ matrix.php }}
     needs: php-contracts
@@ -182,15 +185,20 @@ jobs:
           php-version: '8.3'
           coverage: none
 
+      - name: Set up Node.js for admin behavior tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Verify translation catalogs are synchronized
         run: |
           python tools/i18n-sync.py
-          git diff --exit-code -- linkvitals/languages/linkvitals.pot linkvitals/languages/linkvitals-zh_CN.po
+          git diff --exit-code -- src/languages/linkvitals.pot src/languages/linkvitals-zh_CN.po
 
       - name: Verify compiled Chinese translations are current
         run: |
-          python generate-mo.py
-          git diff --exit-code -- linkvitals/languages/linkvitals-zh_CN.mo
+          python tools/generate-mo.py
+          git diff --exit-code -- src/languages/linkvitals-zh_CN.mo
 
       - name: Build and verify release package
         run: |

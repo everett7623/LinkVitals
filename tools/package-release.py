@@ -2,8 +2,8 @@
 """
 Build a WordPress-installable release zip for LinkVitals.
 
-The repository root is a development workspace; only the plugin directory should
-be archived. This script deliberately creates the upload-safe package:
+The repository root is a development workspace; only the contents of src/
+should be archived. This script deliberately creates the upload-safe package:
 
     linkvitals.zip
         linkvitals/
@@ -32,9 +32,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_SLUG = "linkvitals"
-PLUGIN = ROOT / PLUGIN_SLUG
-MAIN = PLUGIN / f"{PLUGIN_SLUG}.php"
-README = PLUGIN / "readme.txt"
+SOURCE = ROOT / "src"
+MAIN = SOURCE / f"{PLUGIN_SLUG}.php"
+README = SOURCE / "readme.txt"
 
 EXCLUDED_FILENAMES = {".DS_Store", "Thumbs.db"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
@@ -93,11 +93,11 @@ def collect_plugin_files() -> list[Path]:
 
     files = [
         path
-        for path in sorted(PLUGIN.rglob("*"))
-        if path.is_file() and not should_skip(path.relative_to(PLUGIN))
+        for path in sorted(SOURCE.rglob("*"))
+        if path.is_file() and not should_skip(path.relative_to(SOURCE))
     ]
 
-    nested_main = PLUGIN / PLUGIN_SLUG / f"{PLUGIN_SLUG}.php"
+    nested_main = SOURCE / PLUGIN_SLUG / f"{PLUGIN_SLUG}.php"
     if nested_main in files:
         raise RuntimeError(f"Refusing to package nested plugin copy: {nested_main}")
 
@@ -108,7 +108,7 @@ def collect_plugin_files() -> list[Path]:
 
 
 def archive_name(path: Path) -> str:
-    return f"{PLUGIN_SLUG}/{path.relative_to(PLUGIN).as_posix()}"
+    return f"{PLUGIN_SLUG}/{path.relative_to(SOURCE).as_posix()}"
 
 
 def validate_zip(zip_path: Path) -> None:

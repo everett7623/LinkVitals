@@ -34,7 +34,7 @@ front-end footprint.
 
 1. Download `linkvitals.zip` from the GitHub Releases page.
 2. In WordPress, open **Plugins → Add New Plugin → Upload Plugin**.
-3. Upload the zip, activate LinkVitals, then open **Tools → LinkVitals**.
+3. Upload the zip, activate LinkVitals, then open **LinkVitals** in the admin sidebar.
 4. Select **Start Full Scan**.
 
 The upload archive must contain one top-level `linkvitals/` directory with
@@ -51,9 +51,13 @@ python tools/dev-verify.py
 # Run contract tests
 php tests/run.php
 
+# Run admin behavior regressions
+php tests/admin-navigation.php
+node --test tests/admin-scan.test.js
+
 # Sync and compile translations
 python tools/i18n-sync.py
-python generate-mo.py
+python tools/generate-mo.py
 
 # Build release package
 python tools/package-release.py
@@ -87,12 +91,12 @@ LinkVitals/
 
 | Document | Audience | Covers |
 | --- | --- | --- |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | Branching, commits, PRs, and the release checklist |
-| [SUBMITTING.md](SUBMITTING.md) | Maintainers | WordPress.org plugin directory submission and SVN publishing |
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Contributors | Branching, commits, PRs, and the release checklist |
+| [SUBMITTING.md](docs/SUBMITTING.md) | Maintainers | WordPress.org plugin directory submission and SVN publishing |
 | [CLAUDE.md](CLAUDE.md) | AI coding assistants | Commands, architecture, and pitfalls in one pass |
 | [AGENTS.md](AGENTS.md) | Deep development | Full architecture, data model, settings, and design constraints |
 | [tools/README.md](tools/README.md) | Tooling | What each development script does and when to run it |
-| [references/](references/) | Post-mortems | Evidence and lessons from real defects already fixed |
+| [references/](docs/references/) | Post-mortems | Evidence and lessons from real defects already fixed |
 
 Run `python tools/stats.py` for current code, test, and documentation counts.
 
@@ -100,13 +104,13 @@ Run `python tools/stats.py` for current code, test, and documentation counts.
 
 Every accepted change must bump the plugin version, which is duplicated across
 five locations that must agree. The checklist lives in
-[CONTRIBUTING.md](CONTRIBUTING.md#版本发布流程); `python tools/check-version.py`
+[CONTRIBUTING.md](docs/CONTRIBUTING.md#版本发布流程); `python tools/check-version.py`
 verifies it, and `python tools/dev-verify.py` checks it along with everything
 else.
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for detailed guidelines.
 
 Quick contribution checklist:
 - Follow WordPress coding standards

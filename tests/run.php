@@ -192,20 +192,20 @@ if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
     }
 }
 
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-extractor.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-checker.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-image-repair.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-cron.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-internal.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-settings.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-seo-checker.php';
-require_once dirname( __DIR__ ) . '/linkvitals/includes/class-lha-repair.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-db.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-link-extractor.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-link-checker.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-image-repair.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-admin.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-queue.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-scanner.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-cron.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-ai.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-ai-internal.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-ai-jobs.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-settings.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-seo-checker.php';
+require_once dirname( __DIR__ ) . '/src/includes/class-lha-repair.php';
 
 class LHA_Test_WPDB {
 
@@ -733,7 +733,7 @@ lha_test(
 lha_test(
     'declares indexed queue claim tokens in the database schema',
     static function(): void {
-        $schema = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php' );
+        $schema = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-db.php' );
 
         lha_assert_same( true, is_string( $schema ) && str_contains( $schema, "claim_token varchar(36) NOT NULL DEFAULT ''" ) );
         lha_assert_same( true, is_string( $schema ) && str_contains( $schema, 'KEY claim_token (claim_token)' ) );
@@ -744,8 +744,8 @@ lha_test(
 lha_test(
     'avoids redundant lookups while populating a cleared full-scan queue',
     static function(): void {
-        $queue = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php' );
-        $scanner = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
+        $queue = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-queue.php' );
+        $scanner = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-scanner.php' );
 
         $posts_start = strpos( is_string( $scanner ) ? $scanner : '', 'private function queue_posts(' );
         $posts_end = strpos( is_string( $scanner ) ? $scanner : '', 'private function queue_nav_menus(', (int) $posts_start );
@@ -849,10 +849,10 @@ lha_test(
 lha_test(
     'wires image repair through one AJAX action and bounded bulk client',
     static function(): void {
-        $main   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
-        $admin  = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
-        $table  = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-list-table.php' );
-        $client = file_get_contents( dirname( __DIR__ ) . '/linkvitals/assets/js/image-repair.js' );
+        $main   = file_get_contents( dirname( __DIR__ ) . '/src/linkvitals.php' );
+        $admin  = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-admin.php' );
+        $table  = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-list-table.php' );
+        $client = file_get_contents( dirname( __DIR__ ) . '/src/assets/js/image-repair.js' );
 
         lha_assert_same( true, is_string( $main ) && str_contains( $main, 'class-lha-image-repair.php' ) );
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'wp_ajax_lha_repair_image_variant' ) );
@@ -877,8 +877,8 @@ lha_test(
             lha_assert_same( $card['filter'], LHA_DB::sanitize_report_filter_key( $card['filter'] ) );
         }
 
-        $admin = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
-        $css   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/assets/css/admin.css' );
+        $admin = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-admin.php' );
+        $css   = file_get_contents( dirname( __DIR__ ) . '/src/assets/css/admin.css' );
 
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'class="lha-stat-card lha-stat-card-link' ) );
         lha_assert_same( true, is_string( $css ) && str_contains( $css, '.lha-stat-card-link:focus' ) );
@@ -1015,7 +1015,7 @@ lha_test(
         lha_assert_same( 'lha_ai_active_7_42', $method->invoke( null, 42, 7 ) );
         lha_assert_same( 'lha_ai_active_8_42', $method->invoke( null, 42, 8 ) );
 
-        $jobs = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php' );
+        $jobs = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-ai-jobs.php' );
         lha_assert_same( true, is_string( $jobs ) && str_contains( $jobs, '$target_post_id !== absint( $state[\'target_post_id\'] ?? 0 )' ) );
         lha_assert_same( true, is_string( $jobs ) && str_contains( $jobs, '$user_id !== absint( $state[\'_user_id\'] ?? 0 )' ) );
     }
@@ -1024,8 +1024,8 @@ lha_test(
 lha_test(
     'limits internal-link source counts to matching published post occurrences',
     static function(): void {
-        $analyzer = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-internal-analyzer.php' );
-        $ai       = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-internal.php' );
+        $analyzer = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-internal-analyzer.php' );
+        $ai       = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-ai-internal.php' );
         $post_join = 'p.ID = o.object_id AND BINARY p.post_type = BINARY o.object_type';
 
         lha_assert_same( 2, substr_count( is_string( $analyzer ) ? $analyzer : '', $post_join ) );
@@ -1064,11 +1064,11 @@ lha_test(
 lha_test(
     'wires orphan suggestions through background polling and structured provider output',
     static function(): void {
-        $main     = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
-        $admin    = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
-        $jobs     = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai-jobs.php' );
-        $ai       = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-ai.php' );
-        $client   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/assets/js/ai-admin.js' );
+        $main     = file_get_contents( dirname( __DIR__ ) . '/src/linkvitals.php' );
+        $admin    = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-admin.php' );
+        $jobs     = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-ai-jobs.php' );
+        $ai       = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-ai.php' );
+        $client   = file_get_contents( dirname( __DIR__ ) . '/src/assets/js/ai-admin.js' );
 
         lha_assert_same( true, is_string( $main ) && str_contains( $main, 'class-lha-ai-jobs.php' ) );
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'wp_ajax_lha_ai_orphan_trigger' ) );
@@ -1084,20 +1084,20 @@ lha_test(
 lha_test(
     'keeps release metadata tied to the plugin version',
     static function(): void {
-        $main = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
+        $main = file_get_contents( dirname( __DIR__ ) . '/src/linkvitals.php' );
         preg_match( "/define\( 'LHA_VERSION', '([^']+)' \)/", is_string( $main ) ? $main : '', $version_match );
         $version = $version_match[1] ?? '';
 
         lha_assert_same( true, '' !== $version );
         foreach ( array( 'linkvitals.pot', 'linkvitals-zh_CN.po' ) as $catalog ) {
-            $contents = file_get_contents( dirname( __DIR__ ) . '/linkvitals/languages/' . $catalog );
+            $contents = file_get_contents( dirname( __DIR__ ) . '/src/languages/' . $catalog );
             lha_assert_same(
                 true,
                 is_string( $contents ) && str_contains( $contents, 'Project-Id-Version: LinkVitals ' . $version )
             );
         }
 
-        $checker = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-link-checker.php' );
+        $checker = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-link-checker.php' );
         lha_assert_same( true, is_string( $checker ) && str_contains( $checker, 'LHA_VERSION' ) );
         lha_assert_same( 0, preg_match( '/LinkVitals\/[0-9]+\.[0-9]+\.[0-9]+/', is_string( $checker ) ? $checker : '' ) );
     }
@@ -1114,7 +1114,7 @@ lha_test(
         lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, "- '8.3'" ) );
         lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'php tests/run.php' ) );
         lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python tools/i18n-sync.py' ) );
-        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python generate-mo.py' ) );
+        lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python tools/generate-mo.py' ) );
         lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python tools/package-release.py' ) );
         lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'python tools/dev-verify.py' ) );
         lha_assert_same( true, is_string( $workflow ) && str_contains( $workflow, 'wordpress-integration:' ) );
@@ -1133,9 +1133,9 @@ lha_test(
 
         $integration = file_get_contents( dirname( __DIR__ ) . '/tests/integration/run.php' );
         $uninstall   = file_get_contents( dirname( __DIR__ ) . '/tests/integration/verify-uninstall.php' );
-        $activator   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-activator.php' );
-        $deactivator = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-deactivator.php' );
-        $main        = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
+        $activator   = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-activator.php' );
+        $deactivator = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-deactivator.php' );
+        $main        = file_get_contents( dirname( __DIR__ ) . '/src/linkvitals.php' );
         $multisite   = file_get_contents( dirname( __DIR__ ) . '/tests/integration/multisite-run.php' );
         $multisite_deactivation = file_get_contents( dirname( __DIR__ ) . '/tests/integration/multisite-verify-deactivation.php' );
         $multisite_uninstall = file_get_contents( dirname( __DIR__ ) . '/tests/integration/multisite-verify-uninstall.php' );
@@ -1307,8 +1307,8 @@ lha_test(
 lha_test(
     'fences queue completion and retries with the active claim token',
     static function(): void {
-        $queue   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php' );
-        $scanner = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
+        $queue   = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-queue.php' );
+        $scanner = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-scanner.php' );
 
         lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'public function update_status( int $id, string $status, string $claim_token ): bool' ) );
         lha_assert_same( true, is_string( $queue ) && str_contains( $queue, 'public function increment_attempts( int $id, string $error, string $claim_token ): bool' ) );
@@ -1323,8 +1323,8 @@ lha_test(
 lha_test(
     'uses one aggregate query for each admin statistics summary',
     static function(): void {
-        $db  = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php' );
-        $seo = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-seo-checker.php' );
+        $db  = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-db.php' );
+        $seo = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-seo-checker.php' );
 
         $stats_start = strpos( is_string( $db ) ? $db : '', 'public static function get_stats()' );
         $stats_end = strpos( is_string( $db ) ? $db : '', 'public static function get_issue_total_from_stats(', (int) $stats_start );
@@ -1348,7 +1348,7 @@ lha_test(
 lha_test(
     'renders SEO issue badges through the translation catalog',
     static function(): void {
-        $admin = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
+        $admin = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-admin.php' );
 
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, "'missing_nofollow'            => __( 'Missing nofollow', 'linkvitals' )" ) );
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, "'missing_noopener_noreferrer' => __( 'Missing noopener/noreferrer', 'linkvitals' )" ) );
@@ -1458,8 +1458,8 @@ lha_test(
 lha_test(
     'guards admin batch notifications and client state transitions',
     static function(): void {
-        $admin = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
-        $client = file_get_contents( dirname( __DIR__ ) . '/linkvitals/assets/js/admin.js' );
+        $admin = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-admin.php' );
+        $client = file_get_contents( dirname( __DIR__ ) . '/src/assets/js/admin.js' );
 
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, "if ( 'running' !== \$scan_status )" ) );
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::begin_notification_tracking();' ) );
@@ -1780,8 +1780,8 @@ lha_test(
 lha_test(
     'cleans stale sources without discarding occurrences before extraction succeeds',
     static function(): void {
-        $scanner = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
-        $db      = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php' );
+        $scanner = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-scanner.php' );
+        $db      = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-db.php' );
 
         lha_assert_same( 2, substr_count( is_string( $scanner ) ? $scanner : '', '$this->cleanup_stale_sources( $post_types )' ) );
         lha_assert_same( true, is_string( $scanner ) && str_contains( $scanner, 'LHA_DB::cleanup_stale_occurrences( $post_types, $taxonomies )' ) );
@@ -1893,10 +1893,10 @@ lha_test(
 lha_test(
     'persists repair snapshots before content writes and preserves paused scans',
     static function(): void {
-        $repair = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-repair.php' );
-        $db = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-db.php' );
-        $queue = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-queue.php' );
-        $scanner = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
+        $repair = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-repair.php' );
+        $db = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-db.php' );
+        $queue = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-queue.php' );
+        $scanner = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-scanner.php' );
 
         $replace_start = strpos( is_string( $repair ) ? $repair : '', 'public function replace_url(' );
         $replace_end = strpos( is_string( $repair ) ? $repair : '', 'public function unlink(', (int) $replace_start );
@@ -1935,10 +1935,10 @@ lha_test(
 lha_test(
     'serializes complete upgrade transactions with a recoverable owner lock',
     static function(): void {
-        $main        = file_get_contents( dirname( __DIR__ ) . '/linkvitals/linkvitals.php' );
-        $admin       = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
-        $deactivator = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-deactivator.php' );
-        $uninstall   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/uninstall.php' );
+        $main        = file_get_contents( dirname( __DIR__ ) . '/src/linkvitals.php' );
+        $admin       = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-admin.php' );
+        $deactivator = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-deactivator.php' );
+        $uninstall   = file_get_contents( dirname( __DIR__ ) . '/src/uninstall.php' );
 
         lha_assert_same( true, is_string( $main ) );
         $check_start = strpos( $main, 'public function check_version(): void' );
@@ -1989,10 +1989,10 @@ lha_test(
 lha_test(
     'shares scan notification completion and fully cleans uninstall state',
     static function(): void {
-        $admin     = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-admin.php' );
-        $cron      = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-cron.php' );
-        $scanner   = file_get_contents( dirname( __DIR__ ) . '/linkvitals/includes/class-lha-scanner.php' );
-        $uninstall = file_get_contents( dirname( __DIR__ ) . '/linkvitals/uninstall.php' );
+        $admin     = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-admin.php' );
+        $cron      = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-cron.php' );
+        $scanner   = file_get_contents( dirname( __DIR__ ) . '/src/includes/class-lha-scanner.php' );
+        $uninstall = file_get_contents( dirname( __DIR__ ) . '/src/uninstall.php' );
 
         lha_assert_same( false, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::begin_notification_tracking( true )' ) );
         lha_assert_same( true, is_string( $admin ) && str_contains( $admin, 'LHA_Cron::complete_notification_tracking()' ) );

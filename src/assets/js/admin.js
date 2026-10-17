@@ -10,6 +10,11 @@
 
     var LHA = {
         pollInterval: null,
+        batchTimer: null,
+        batchInFlight: false,
+        progressInFlight: false,
+        scanRevision: 0,
+        controlRevision: 0,
         isScanning: false,
 
         init: function() {
@@ -162,10 +167,11 @@
         },
 
         checkInitialState: function() {
-            // If progress bar is visible, start polling
+            // 运行中的仪表盘刷新后，同时恢复进度轮询与客户端批处理。
             if ($('#lha-scan-progress').is(':visible')) {
                 this.isScanning = true;
                 this.startPolling();
+                this.processBatch();
             }
         },
 
@@ -174,6 +180,7 @@
          */
         startScan: function(type) {
             var self = this;
+            var controlRevision = ++this.controlRevision;
 
             $.ajax({
                 url: lhaAdmin.ajaxUrl,
@@ -187,6 +194,9 @@
                     $('#lha-btn-full-scan, #lha-btn-incremental-scan, #lha-btn-recheck-broken').prop('disabled', true);
                 },
                 success: function(response) {
+                    if (controlRevision !== self.controlRevision) {
+                        return;
+                    }
                     if (response.success) {
                         self.isScanning = true;
                         $('#lha-scan-progress').show();
@@ -211,9 +221,14 @@
         processBatch: function() {
             var self = this;
 
-            if (!this.isScanning) {
+            if (!this.isScanning || this.batchInFlight) {
                 return;
             }
+
+            clearTimeout(this.batchTimer);
+            this.batchTimer = null;
+            this.batchInFlight = true;
+            var revision = this.scanRevision;
 
             $.ajax({
                 url: lhaAdmin.ajaxUrl,
@@ -223,15 +238,13 @@
                     nonce: lhaAdmin.nonce
                 },
                 success: function(response) {
+                    if (revision !== self.scanRevision || !self.isScanning) {
+                        return;
+                    }
                     if (response.success) {
                         var data = response.data;
                         if (data.status === 'running' || data.status === 'checking_links') {
-                            // Continue processing after a short delay
-                            if (self.isScanning) {
-                                setTimeout(function() {
-                                    self.processBatch();
-                                }, 1000);
-                            }
+                            self.scheduleBatch(1000);
                         } else if (data.status === 'completed' || data.status === 'idle') {
                             self.onScanComplete();
                         } else if (data.status === 'paused') {
@@ -243,14 +256,27 @@
                     }
                 },
                 error: function() {
-                    // Retry after delay on error
-                    if (self.isScanning) {
-                        setTimeout(function() {
-                            self.processBatch();
-                        }, 5000);
+                    if (revision === self.scanRevision && self.isScanning) {
+                        self.scheduleBatch(5000);
+                    }
+                },
+                complete: function() {
+                    self.batchInFlight = false;
+                    // 恢复时若旧请求仍在执行，等待其结束后再启动下一批。
+                    if (revision !== self.scanRevision && self.isScanning) {
+                        self.scheduleBatch(1000);
                     }
                 }
             });
+        },
+
+        scheduleBatch: function(delay) {
+            var self = this;
+            clearTimeout(this.batchTimer);
+            this.batchTimer = setTimeout(function() {
+                self.batchTimer = null;
+                self.processBatch();
+            }, delay);
         },
 
         /**
@@ -266,6 +292,10 @@
         },
 
         stopPolling: function() {
+            // 作废旧响应并清除待执行批次，避免暂停后恢复产生第二条处理链。
+            this.scanRevision++;
+            clearTimeout(this.batchTimer);
+            this.batchTimer = null;
             if (this.pollInterval) {
                 clearInterval(this.pollInterval);
                 this.pollInterval = null;
@@ -275,6 +305,12 @@
         getProgress: function() {
             var self = this;
 
+            if (!this.isScanning || this.progressInFlight) {
+                return;
+            }
+            this.progressInFlight = true;
+            var revision = this.scanRevision;
+
             $.ajax({
                 url: lhaAdmin.ajaxUrl,
                 type: 'POST',
@@ -283,6 +319,9 @@
                     nonce: lhaAdmin.nonce
                 },
                 success: function(response) {
+                    if (revision !== self.scanRevision || !self.isScanning) {
+                        return;
+                    }
                     if (response.success) {
                         var data = response.data;
                         self.updateProgressUI(data);
@@ -293,6 +332,9 @@
                             self.onScanPaused();
                         }
                     }
+                },
+                complete: function() {
+                    self.progressInFlight = false;
                 }
             });
         },
@@ -331,6 +373,7 @@
          */
         pauseScan: function() {
             var self = this;
+            var controlRevision = ++this.controlRevision;
 
             $.ajax({
                 url: lhaAdmin.ajaxUrl,
@@ -340,6 +383,10 @@
                     nonce: lhaAdmin.nonce
                 },
                 success: function(response) {
+                    // 后发控制命令使旧回调失效，避免迟到的暂停响应覆盖恢复状态。
+                    if (controlRevision !== self.controlRevision) {
+                        return;
+                    }
                     if (response.success) {
                         if (response.data && response.data.status === 'paused') {
                             self.onScanPaused();
@@ -359,6 +406,7 @@
          */
         resumeScan: function() {
             var self = this;
+            var controlRevision = ++this.controlRevision;
 
             $.ajax({
                 url: lhaAdmin.ajaxUrl,
@@ -368,9 +416,13 @@
                     nonce: lhaAdmin.nonce
                 },
                 success: function(response) {
+                    if (controlRevision !== self.controlRevision) {
+                        return;
+                    }
                     if (response.success) {
                         if (response.data && response.data.status === 'running') {
                             self.isScanning = true;
+                            $('#lha-scan-progress').show();
                             $('#lha-btn-pause').show();
                             $('#lha-btn-resume').hide();
                             self.startPolling();

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate .mo file from .po file
-Run: python generate-mo.py
+Run: python tools/generate-mo.py
 """
 
 import struct
@@ -105,6 +105,6 @@ def generate_mo(po_file, mo_file):
     print(f"Generated: {mo_file} ({num} strings)")
 
 if __name__ == '__main__':
-    po = 'linkvitals/languages/linkvitals-zh_CN.po'
-    mo = 'linkvitals/languages/linkvitals-zh_CN.mo'
+    po = 'src/languages/linkvitals-zh_CN.po'
+    mo = 'src/languages/linkvitals-zh_CN.mo'
     generate_mo(po, mo)

@@ -1,7 +1,7 @@
 <?php
 /**
  * Generate .mo file from .po file
- * Run: php generate-mo.php
+ * Run: php tools/generate-mo.php
  */
 
 function generate_mo( string $po_file, string $mo_file ): void {
@@ -71,7 +71,7 @@ function generate_mo( string $po_file, string $mo_file ): void {
     echo "Generated: $mo_file (" . count( $translations ) . " strings)\n";
 }
 
-$po = __DIR__ . '/linkvitals/languages/linkvitals-zh_CN.po';
-$mo = __DIR__ . '/linkvitals/languages/linkvitals-zh_CN.mo';
+$po = dirname( __DIR__ ) . '/src/languages/linkvitals-zh_CN.po';
+$mo = dirname( __DIR__ ) . '/src/languages/linkvitals-zh_CN.mo';
 
 generate_mo( $po, $mo );

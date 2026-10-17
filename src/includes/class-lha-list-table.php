@@ -89,8 +89,6 @@ class LHA_List_Table extends WP_List_Table {
         $per_page = 20;
         $current_page = $this->get_pagenum();
 
-        $this->process_bulk_action();
-
         $args = array(
             'status'   => isset( $_GET['link_status'] ) ? LHA_DB::sanitize_report_filter_key( wp_unslash( $_GET['link_status'] ) ) : '',
             'search'   => isset( $_GET['s'] ) ? sanitize_text_field( wp_unslash( $_GET['s'] ) ) : '',
@@ -483,7 +481,7 @@ class LHA_List_Table extends WP_List_Table {
                 'lha_bulk_action' => $action,
                 'link_ids'        => $link_ids,
                 '_wpnonce'        => wp_create_nonce( 'lha_bulk_confirm_nonce' ),
-            ), admin_url( 'tools.php' ) );
+            ), admin_url( 'admin.php' ) );
 
             wp_safe_redirect( $redirect_url );
             exit;

@@ -18,7 +18,7 @@ if sys.platform == "win32":
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "linkvitals"
+PLUGIN = ROOT / "src"
 
 
 def count_lines(file_path: Path) -> int:

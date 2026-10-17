@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "linkvitals"
+PLUGIN = ROOT / "src"
 MAIN = PLUGIN / "linkvitals.php"
 README = PLUGIN / "readme.txt"
 POT = PLUGIN / "languages" / "linkvitals.pot"
@@ -202,7 +202,7 @@ def check_translations(reporter: Reporter) -> None:
     if mo.stat().st_mtime + 1 >= PO.stat().st_mtime:
         reporter.ok("Chinese .mo file is at least as fresh as the .po file.")
     else:
-        reporter.fail("Chinese .mo file is older than the .po file; run python generate-mo.py.")
+        reporter.fail("Chinese .mo file is older than the .po file; run python tools/generate-mo.py.")
 
     pot_text = read_text(POT)
     if '"X-Generator: Manual\\n"' in pot_text:
@@ -975,10 +975,10 @@ def check_ci_workflow(reporter: Reporter) -> None:
         "- '8.3'",
         "php tests/run.php",
         "python tools/i18n-sync.py",
-        "python generate-mo.py",
+        "python tools/generate-mo.py",
         "python tools/package-release.py",
         "python tools/dev-verify.py",
-        "git diff --exit-code -- linkvitals/languages/linkvitals-zh_CN.mo",
+        "git diff --exit-code -- src/languages/linkvitals-zh_CN.mo",
         "wordpress-integration:",
         "image: mysql:8.0",
         "wordpress: '6.4'",
@@ -1167,21 +1167,45 @@ def run_optional_php_tests(reporter: Reporter) -> None:
         reporter.warn("PHP CLI not found; skipped dependency-free PHP tests.")
         return
 
-    test_runner = ROOT / "tests" / "run.php"
+    for filename in ("run.php", "admin-navigation.php"):
+        test_runner = ROOT / "tests" / filename
+        result = subprocess.run(
+            [php, str(test_runner)],
+            cwd=ROOT,
+            encoding="utf-8",
+            errors="replace",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            reporter.fail(f"PHP {filename} failed:\n" + result.stdout.strip())
+        else:
+            summary = result.stdout.strip().splitlines()[-1]
+            reporter.ok(f"PHP {filename} passed ({summary})")
+
+
+def run_optional_js_tests(reporter: Reporter) -> None:
+    node = shutil.which("node")
+    if not node:
+        reporter.warn("Node.js not found; skipped admin scan behavior tests.")
+        return
+
     result = subprocess.run(
-        [php, str(test_runner)],
+        [node, "--test", str(ROOT / "tests" / "admin-scan.test.js")],
         cwd=ROOT,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
     )
 
     if result.returncode != 0:
-        reporter.fail("PHP contract tests failed:\n" + result.stdout.strip())
+        reporter.fail("Admin scan behavior tests failed:\n" + result.stdout.strip())
     else:
-        summary = result.stdout.strip().splitlines()[-1]
-        reporter.ok(f"PHP contract tests passed ({summary})")
+        reporter.ok("Admin scan behavior tests passed.")
 
 
 def parse_args() -> argparse.Namespace:
@@ -1225,6 +1249,7 @@ def main() -> int:
     check_release_zip(reporter, version, args.require_release_zip)
     run_optional_php_lint(reporter)
     run_optional_php_tests(reporter)
+    run_optional_js_tests(reporter)
 
     return reporter.finish()
 

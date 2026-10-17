@@ -41,11 +41,11 @@
 
 如果需要更新版本号：
 
-- [ ] 已更新 `linkvitals/linkvitals.php` - Version 头部
-- [ ] 已更新 `linkvitals/linkvitals.php` - LHA_VERSION 常量
-- [ ] 已更新 `linkvitals/readme.txt` - Stable tag
-- [ ] 已更新 `linkvitals/readme.txt` - Changelog
-- [ ] 已更新 `linkvitals/readme.txt` - Upgrade Notice
+- [ ] 已更新 `src/linkvitals.php` - Version 头部
+- [ ] 已更新 `src/linkvitals.php` - LHA_VERSION 常量
+- [ ] 已更新 `src/readme.txt` - Stable tag
+- [ ] 已更新 `src/readme.txt` - Changelog
+- [ ] 已更新 `src/readme.txt` - Upgrade Notice
 - [ ] 运行了 `python tools/check-version.py` 验证一致性
 
 ## 翻译
@@ -54,7 +54,7 @@
 
 - [ ] 运行了 `python tools/i18n-sync.py`
 - [ ] 更新了 `.po` 文件中的翻译
-- [ ] 运行了 `python generate-mo.py` 编译翻译
+- [ ] 运行了 `python tools/generate-mo.py` 编译翻译
 
 ## 截图（如适用）
 
@@ -69,7 +69,7 @@
 - [ ] 使用 `$wpdb->prepare()` 处理所有 SQL 查询
 - [ ] 使用 `sanitize_*` 和 `esc_*` 函数
 - [ ] Commit 消息清晰描述了变更
-- [ ] 我已经阅读了 CONTRIBUTING.md
+- [ ] 我已经阅读了 docs/CONTRIBUTING.md
 
 ## 额外说明
 

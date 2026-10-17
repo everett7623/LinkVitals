@@ -14,12 +14,16 @@ python tools/dev-verify.py
 # 单独运行依赖无关的 PHP 契约测试（53 个）
 php tests/run.php
 
+# 后台菜单/跳转行为回归及浏览器扫描循环回归（无需第三方依赖）
+php tests/admin-navigation.php
+node --test tests/admin-scan.test.js
+
 # 单独 lint 某个类文件
-php -l linkvitals/includes/class-lha-scanner.php
+php -l src/includes/class-lha-scanner.php
 
 # 修改用户可见字符串后：同步 catalog → 手工翻译 .po → 编译 .mo
 python tools/i18n-sync.py
-python generate-mo.py
+python tools/generate-mo.py
 
 # 版本一致性快速检查（5 处）
 python tools/check-version.py
@@ -30,6 +34,8 @@ python tools/dev-verify.py --require-release-zip
 ```
 
 `dev-verify.py` 是 `tests/run.php` 的超集：它先跑自己的 Python 检查，再自动调用 `php -l` 和 `php tests/run.php`（PHP 不在 PATH 时降级为 warn 并跳过）。日常只跑 `python tools/dev-verify.py` 即可。
+
+验证脚本也运行 `tests/admin-navigation.php` 和 `tests/admin-scan.test.js`：前者以 WordPress 桩验证真实后台类，后者以浏览器桩执行真实 `admin.js`。Node.js 不可用时本地跳过 JS 回归并警告，CI 使用 Node.js 22 执行。这些行为回归仍不等同于真实 WordPress 浏览器验收。
 
 **测试无法按名字过滤。** `tests/run.php` 用 `lha_test( '名称', callable )` 注册进一个数组后全量执行，没有 argv/env 过滤开关。要单独调试一个用例，临时注释掉其他 `lha_test(...)` 调用，或直接读输出里的 `[FAIL] <名称>` 定位。
 
@@ -54,7 +60,9 @@ python tools/dev-verify.py --require-release-zip
 ## 架构要点
 
 ### 启动
-`LinkVitals_Plugin`（单例）在 `plugins_loaded` 启动 → `init` 载入 textdomain → `admin_init` 执行 `check_version()` → 仅在 `is_admin()` 时构造 admin 对象 → cron 始终注册。**没有 autoloader**，`linkvitals/linkvitals.php` 顶部是手写的 `require_once` 列表。
+`LinkVitals_Plugin`（单例）在 `plugins_loaded` 启动 → `init` 载入 textdomain → `admin_init` 执行 `check_version()` → 仅在 `is_admin()` 时构造 admin 对象 → cron 始终注册。**没有 autoloader**，`src/linkvitals.php` 顶部是手写的 `require_once` 列表。
+
+后台使用独立一级菜单，统一入口为 `admin.php?page=lha-dashboard`。旧 `tools.php` 入口在 `admin_init` 保留查询参数跳转，POST 使用 307 保留表单内容。资源加载与 `load-$hook` 使用 `add_menu_page()` 返回的 hook；批量动作在 `load-$hook` 中提前处理，渲染复用同一列表实例，`prepare_items()` 不执行动作。
 
 ### 扫描流水线（`LHA_Scanner` 编排）
 ```
@@ -104,24 +112,24 @@ API key 加密只在站点定义了 `AUTH_KEY` 时进行；缺失时设置页报
 
 ## 国际化工作流
 
-翻译是**手工维护**的（非 WP-CLI 生成）。改动用户可见字符串后必须：`python tools/i18n-sync.py` → 手工填写 `linkvitals-zh_CN.po` 的 msgstr → `python generate-mo.py`。
+翻译是**手工维护**的（非 WP-CLI 生成）。改动用户可见字符串后必须：`python tools/i18n-sync.py` → 手工填写 `linkvitals-zh_CN.po` 的 msgstr → `python tools/generate-mo.py`。
 
 CI 会重跑这两个脚本并执行 `git diff --exit-code`，所以 **`.pot` / `.po` / `.mo` 三个生成文件都必须提交**。`dev-verify.py` 另外按 mtime 校验 `.mo` 不旧于 `.po`，并逐条解码校验若干关键中文译文。
 
 ## 版本发布
 
 任何被接受的源码/文档/打包改动都要 bump 版本，**5 处必须一致**：
-1. `linkvitals/linkvitals.php` — `Version:` 头部
-2. `linkvitals/linkvitals.php` — `LHA_VERSION` 常量
-3. `linkvitals/readme.txt` — `Stable tag`
-4. `linkvitals/readme.txt` — `Changelog` 顶部条目
-5. `linkvitals/readme.txt` — `Upgrade Notice` 顶部条目
+1. `src/linkvitals.php` — `Version:` 头部
+2. `src/linkvitals.php` — `LHA_VERSION` 常量
+3. `src/readme.txt` — `Stable tag`
+4. `src/readme.txt` — `Changelog` 顶部条目
+5. `src/readme.txt` — `Upgrade Notice` 顶部条目
 
-上架 WordPress.org 插件目录的完整流程（提交表单、审核、SVN 发布）见 [`SUBMITTING.md`](SUBMITTING.md)。
+上架 WordPress.org 插件目录的完整流程（提交表单、审核、SVN 发布）见 [`SUBMITTING.md`](docs/SUBMITTING.md)。
 
 ## 陷阱
 
-- **仓库根 ≠ 插件根**：编辑 `linkvitals/` 下的源码；`linkvitals.zip` 是产物（且被 `.gitignore` 忽略），只在跑打包脚本后更新，随时可能过期
+- **仓库根 ≠ 插件源码根**：编辑 `src/` 下的源码；打包脚本会将其映射为 zip 内的 `linkvitals/`。`linkvitals.zip` 是产物（且被 `.gitignore` 忽略），只在跑打包脚本后更新，随时可能过期
 - **发布包必须叫 `linkvitals.zip`**，不能是 `linkvitals-<version>.zip`：部分主机的文件管理器会按 zip 名建目录，产生 `wp-content/plugins/linkvitals-<version>/`，破坏 WordPress 的删除与升级
 - **`language` 设置不能用 `sanitize_key()`**：会把 `zh_CN` 变成 `zh_cn`。用 `LHA_Settings` 的显式规范化，同时兼容历史小写值。默认值是 `auto`（跟随站点语言，`zh*` → 简体中文）
 - **与 `wp_posts` 的 post_type JOIN 必须两侧 BINARY**：核心表默认 `utf8mb4_unicode_520_ci`，插件表 `utf8mb4_unicode_ci`，普通字符串比较在默认安装上直接 1267 报错（内部链接统计、AI 孤儿候选、旧 occurrence 清理三处都是）

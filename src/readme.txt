@@ -4,7 +4,7 @@ Tags: broken links, link checker, seo, 404, redirect
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 0.3.40
+Stable tag: 0.3.41
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -62,7 +62,7 @@ the FAQ to that provider, for the duration of that single request.
 
 1. Upload the `linkvitals` folder to `/wp-content/plugins/`
 2. Activate the plugin through the Plugins menu
-3. Go to Tools > LinkVitals
+3. Open LinkVitals in the WordPress admin sidebar
 4. Click "Start Full Scan" to begin your first audit
 
 If uploading a zip through a hosting file manager, use `linkvitals.zip`.
@@ -106,6 +106,11 @@ then install `linkvitals.zip` and activate LinkVitals. Do not activate both
 folders at the same time. Existing `lha_*` data and settings remain compatible.
 
 == Changelog ==
+
+= 0.3.41 =
+* Moves LinkVitals to its own top-level admin menu and preserves old Tools links, query parameters, and form submissions
+* Processes report bulk actions before the admin header so confirmation redirects work reliably
+* Resumes browser-driven scan processing after dashboard reloads and prevents overlapping requests during pause/resume and progress polling
 
 = 0.3.40 =
 * Adds an explicit description of the optional AI provider data flow so the disclosure appears outside the FAQ as well
@@ -397,6 +402,9 @@ folders at the same time. Existing `lha_*` data and settings remain compatible.
 * Settings page
 
 == Upgrade Notice ==
+
+= 0.3.41 =
+Open LinkVitals directly from the admin sidebar. Existing Tools links remain compatible; bulk confirmation redirects and scan continuation after dashboard reloads are fixed.
 
 = 0.3.40 =
 Documentation-only release: describes the optional AI provider data flow directly in the plugin description.

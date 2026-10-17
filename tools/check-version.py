@@ -21,8 +21,8 @@ if sys.platform == "win32":
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN_FILE = ROOT / "linkvitals" / "linkvitals.php"
-README_FILE = ROOT / "linkvitals" / "readme.txt"
+MAIN_FILE = ROOT / "src" / "linkvitals.php"
+README_FILE = ROOT / "src" / "readme.txt"
 
 
 def extract_version(pattern: str, text: str, label: str) -> str | None:
@@ -84,11 +84,11 @@ def main() -> int:
             print(f"  - {location}: {version}")
         print()
         print("请同步更新以下 5 个位置的版本号：")
-        print("  1. linkvitals/linkvitals.php - Version: 头部")
-        print("  2. linkvitals/linkvitals.php - LHA_VERSION 常量")
-        print("  3. linkvitals/readme.txt - Stable tag")
-        print("  4. linkvitals/readme.txt - Changelog 顶部条目")
-        print("  5. linkvitals/readme.txt - Upgrade Notice 顶部条目")
+        print("  1. src/linkvitals.php - Version: 头部")
+        print("  2. src/linkvitals.php - LHA_VERSION 常量")
+        print("  3. src/readme.txt - Stable tag")
+        print("  4. src/readme.txt - Changelog 顶部条目")
+        print("  5. src/readme.txt - Upgrade Notice 顶部条目")
         return 1
 
 
